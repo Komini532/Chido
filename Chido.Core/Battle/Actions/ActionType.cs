@@ -1,4 +1,4 @@
-namespace RpgBot.Core.Battle.Actions;
+namespace Chido.Core.Battle.Actions;
 
 public enum ActionType
 {

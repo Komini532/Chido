@@ -1,4 +1,4 @@
-namespace RpgBot.Core.Battle;
+namespace Chido.Core.Battle;
 
 public enum BattlePhase
 {

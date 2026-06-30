@@ -1,7 +1,7 @@
 using System;
-using RpgBot.Core.Entities;
+using Chido.Core.Entities;
 
-namespace RpgBot.Core.Battle;
+namespace Chido.Core.Battle;
 
 public class BattleParticipant
 {

@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace RpgBot.Core.Stats;
+namespace Chido.Core.Stats;
 
 /// <summary>
 /// 割合値構造体。内部は permyriad (10000 = 100%) で管理し BigInteger との計算精度を保証する。

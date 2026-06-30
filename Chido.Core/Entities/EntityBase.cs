@@ -1,8 +1,8 @@
 using System;
 using System.Numerics;
-using RpgBot.Core.Stats;
+using Chido.Core.Stats;
 
-namespace RpgBot.Core.Entities;
+namespace Chido.Core.Entities;
 
 public abstract class EntityBase : IEntity
 {

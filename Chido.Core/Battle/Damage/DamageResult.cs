@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace RpgBot.Core.Battle.Damage;
+namespace Chido.Core.Battle.Damage;
 
 public sealed record DamageResult(
     BigInteger            FinalDamage,

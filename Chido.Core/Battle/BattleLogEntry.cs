@@ -1,6 +1,6 @@
 using System;
 
-namespace RpgBot.Core.Battle;
+namespace Chido.Core.Battle;
 
 /// <summary>
 /// バトルログ1行分。Discordメッセージ編集時の表示に使用する。

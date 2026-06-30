@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace RpgBot.Core.Battle.Actions;
+namespace Chido.Core.Battle.Actions;
 
 public interface IBattleAction
 {
