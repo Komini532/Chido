@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace RpgBot.Core.Battle.Damage.Modifiers;
+namespace Chido.Core.Battle.Damage.Modifiers;
 
 /// <summary>固定ダメージの加算/減算 (Flat フェーズ固定)</summary>
 public sealed class FlatDamageModifier : IDamageModifier

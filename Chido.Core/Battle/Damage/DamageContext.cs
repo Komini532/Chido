@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using RpgBot.Core.Entities;
-using RpgBot.Core.Stats;
+using Chido.Core.Entities;
+using Chido.Core.Stats;
 
-namespace RpgBot.Core.Battle.Damage;
+namespace Chido.Core.Battle.Damage;
 
 public sealed class DamageContext
 {

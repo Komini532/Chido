@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace RpgBot.Core.Battle.Damage;
+namespace Chido.Core.Battle.Damage;
 
 public interface IDamageModifier
 {

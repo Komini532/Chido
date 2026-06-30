@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace RpgBot.Core.Battle.Actions;
+namespace Chido.Core.Battle.Actions;
 
 public sealed record BattleActionResult(
     bool                  SessionEnded,

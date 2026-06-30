@@ -1,7 +1,7 @@
 using System.Numerics;
-using RpgBot.Core.Stats;
+using Chido.Core.Stats;
 
-namespace RpgBot.Core.Battle.Damage.Modifiers;
+namespace Chido.Core.Battle.Damage.Modifiers;
 
 /// <summary>
 /// 指定フェーズで current に Ratio を乗算する汎用 Modifier。

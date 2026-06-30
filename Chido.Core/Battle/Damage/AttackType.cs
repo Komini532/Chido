@@ -1,4 +1,4 @@
-namespace RpgBot.Core.Battle.Damage;
+namespace Chido.Core.Battle.Damage;
 
 public enum AttackType
 {

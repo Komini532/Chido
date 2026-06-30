@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using RpgBot.Core.Entities;
+using Chido.Core.Entities;
 
-namespace RpgBot.Core.Battle.Damage;
+namespace Chido.Core.Battle.Damage;
 
 public static class DamageCalculator
 {
