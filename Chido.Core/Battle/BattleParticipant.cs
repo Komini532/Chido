@@ -3,25 +3,35 @@ using Chido.Core.Entities;
 
 namespace Chido.Core.Battle;
 
+public enum EntityType
+{
+    Player,
+    Enemy,
+}
+
 public class BattleParticipant
 {
-    public IEntity Entity        { get; }
-    public ulong?  DiscordUserId { get; } // 敵は null
-    public int     Initiative    { get; private set; }
-    public bool    HasActed      { get; set; }
+    public IEntity        Entity        { get; }
+    public EntityType     EntityType    { get; }
+    public ulong?         DiscordUserId { get; } // プレイヤーのみ設定 (DB: user_id)
+    public string?        EnemyRef      { get; } // 敵のみ設定 (DB: enemy_ref)
 
-    public bool IsPlayer => DiscordUserId.HasValue;
+    // ターン制御には使わず、Discord埋め込みでの参加者表示順にのみ使う
+    public DateTimeOffset JoinedAt { get; }
 
-    public BattleParticipant(IEntity entity, ulong? discordUserId = null)
+    public bool IsPlayer => EntityType == EntityType.Player;
+
+    public BattleParticipant(
+        IEntity         entity,
+        EntityType      entityType,
+        ulong?          discordUserId = null,
+        string?         enemyRef      = null,
+        DateTimeOffset? joinedAt      = null)
     {
         Entity        = entity;
+        EntityType    = entityType;
         DiscordUserId = discordUserId;
-    }
-
-    /// <summary>Speed + Speed×20% 乱数でイニシアティブ決定</summary>
-    public void RollInitiative(Random rng)
-    {
-        var jitter = rng.Next(0, Entity.Speed / 5 + 1);
-        Initiative = Entity.Speed + jitter;
+        EnemyRef      = enemyRef;
+        JoinedAt      = joinedAt ?? DateTimeOffset.UtcNow;
     }
 }
