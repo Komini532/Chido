@@ -1,4 +1,5 @@
 using Chido.Commands;
+using Chido.Commands.Admin;
 using Discord;
 using Discord.WebSocket;
 
@@ -19,6 +20,8 @@ var commandHandlers = new Dictionary<string, Func<SocketSlashCommand, Task>>
     [SkillCommand.Name] = SkillCommand.ExecuteAsync,
     [StatusCommand.Name] = StatusCommand.ExecuteAsync,
     [UseCommand.Name] = UseCommand.ExecuteAsync,
+    [AdminDbMigrateCommand.Name] = AdminDbMigrateCommand.ExecuteAsync,
+    [AdminDbStatusCommand.Name] = AdminDbStatusCommand.ExecuteAsync,
 };
 
 var slashCommands = new SlashCommandBuilder[]
@@ -43,6 +46,16 @@ var slashCommands = new SlashCommandBuilder[]
         .WithName(UseCommand.Name)
         .WithDescription(UseCommand.Description)
         .AddOption(UseCommand.OptionItemName, ApplicationCommandOptionType.String, "使用するアイテム名", isRequired: true),
+    // 実際の可否判定は AdminAuthorization の許可リストで行うが、
+    // 一般ユーザーのコマンド一覧に表示させないための多層防御としてDefaultMemberPermissionsも設定しておく
+    new SlashCommandBuilder()
+        .WithName(AdminDbMigrateCommand.Name)
+        .WithDescription(AdminDbMigrateCommand.Description)
+        .WithDefaultMemberPermissions(GuildPermission.Administrator),
+    new SlashCommandBuilder()
+        .WithName(AdminDbStatusCommand.Name)
+        .WithDescription(AdminDbStatusCommand.Description)
+        .WithDefaultMemberPermissions(GuildPermission.Administrator),
 };
 
 client.Log += msg =>

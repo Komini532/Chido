@@ -7,8 +7,11 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Discord.Net" Version="3.15.3" />
+    <!-- adminコマンドからDatabase.MigrateAsync()等を呼ぶため、実行時にもPomeloが必要 -->
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Chido.Core\Chido.Core.csproj" />
+    <ProjectReference Include="..\Chido.Data\Chido.Data.csproj" />
   </ItemGroup>
 </Project>

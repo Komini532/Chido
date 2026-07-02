@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pomelo 8.0.2 は Microsoft.EntityFrameworkCore.Relational を [8.0.2, 8.0.999] にピン留めしているため、
+         Design パッケージのバージョンをPomeloの下限(8.0.2)に合わせ、Chido側との参照バージョン不一致(CS1705)を防ぐ -->
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- EntityType / ActionType / BattleEndReason 列挙体を再利用するため参照 -->
+    <ProjectReference Include="..\Chido.Core\Chido.Core.csproj" />
+  </ItemGroup>
+</Project>

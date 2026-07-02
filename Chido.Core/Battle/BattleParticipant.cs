@@ -3,10 +3,13 @@ using Chido.Core.Entities;
 
 namespace Chido.Core.Battle;
 
+// DB(chido_battle_participant.entity_type: TINYINT UNSIGNED)にそのまま永続化されるため、
+// 数値を明示している。既存行の意味が変わらないよう、今後の変更は末尾への追加のみとし、
+// 既存メンバーの並び替え・削除は行わないこと。
 public enum EntityType
 {
-    Player,
-    Enemy,
+    Player = 0,
+    Enemy  = 1,
 }
 
 public class BattleParticipant
