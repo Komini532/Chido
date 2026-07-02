@@ -16,10 +16,15 @@ public static class DamageCalculator
             baseDef - ctx.DefensePenetration.Of(baseDef));
 
         // ── 2. PreDefense フェーズ: 有効 ATK 確定 ────────────────────────
-        var effectiveAtk = ApplyPhase(ctx.RawAtk, ModifierPhase.PreDefense, ctx);
+        var effectiveAtk = BigInteger.Max(
+            BigInteger.Zero,
+            ApplyPhase(ctx.RawAtk, ModifierPhase.PreDefense, ctx));
 
-        // ── 3. 基礎ダメージ (ATK - DEF, 下限 0) ─────────────────────────
-        var baseDamage         = BigInteger.Max(BigInteger.Zero, effectiveAtk - effectiveDef);
+        // ── 3. 基礎ダメージ (ATK² / (ATK + DEF), 下限 0) ────────────────
+        var atkDefSum  = effectiveAtk + effectiveDef;
+        var baseDamage = atkDefSum.IsZero
+            ? BigInteger.Zero
+            : BigInteger.Max(BigInteger.Zero, effectiveAtk * effectiveAtk / atkDefSum);
         var preModifierDamage  = baseDamage;
 
         // ── 4. PostDefense フェーズ: スキル倍率・属性・クリティカル ────────
