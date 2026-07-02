@@ -28,9 +28,9 @@ public sealed class RatioMultiplierModifier : IDamageModifier
     public static RatioMultiplierModifier SkillPower(Ratio power, string skillName)
         => new(power, ModifierPhase.PostDefense, $"{skillName} ×{power.Percent:F0}%");
 
-    /// <summary>属性補正 (PostDefense)</summary>
+    /// <summary>属性補正。攻撃者の ATK に乗算するため防御差し引き前の PreDefense で適用する</summary>
     public static RatioMultiplierModifier Elemental(Ratio multiplier, string elementName)
-        => new(multiplier, ModifierPhase.PostDefense, $"{elementName}属性 ×{multiplier.Percent:F0}%");
+        => new(multiplier, ModifierPhase.PreDefense, $"{elementName}属性 ×{multiplier.Percent:F0}%");
 
     /// <summary>クリティカル (PostDefense)</summary>
     public static RatioMultiplierModifier Critical(Ratio multiplier)

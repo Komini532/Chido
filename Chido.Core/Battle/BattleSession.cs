@@ -41,14 +41,55 @@ public class BattleSession
         LastActionAt = DateTimeOffset.UtcNow;
     }
 
+    // --- ターゲット解決 ---
+
+    /// <summary>
+    /// actor の CurrentTarget を解決する。対象が戦闘不能等で Active でなくなっていた場合は自動失効させ、
+    /// Participants リスト内で Active を保つ先頭の敵 (行動側と異なる EntityType) を次点として自動選定する。
+    /// </summary>
+    public BattleParticipant? ResolveTarget(BattleParticipant actor)
+    {
+        var current = _participants.FirstOrDefault(p => p.Entity.Id == actor.CurrentTargetId);
+        if (current is { IsActive: true })
+            return current;
+
+        var next = _participants.FirstOrDefault(p => p.EntityType != actor.EntityType && p.IsActive);
+        actor.SetTarget(next?.Entity.Id);
+        return next;
+    }
+
+    /// <summary>
+    /// /target 等による明示的なターゲット指定。対象は行動側と異なる EntityType かつ Active である必要がある。
+    /// </summary>
+    public bool SetTarget(BattleParticipant actor, Guid targetEntityId)
+    {
+        var target = _participants.FirstOrDefault(p =>
+            p.Entity.Id == targetEntityId && p.EntityType != actor.EntityType && p.IsActive);
+
+        if (target is null) return false;
+
+        actor.SetTarget(target.Entity.Id);
+        return true;
+    }
+
     // --- 終了判定 ---
+    // 発生順序に依存しない、各 ParticipantStatus の最終状態のみを見る集計ベースの判定
     public (bool ended, BattleEndReason reason) CheckEndCondition()
     {
-        bool playersAlive = _participants.Any(p => p.IsPlayer && p.Entity.IsAlive);
-        bool enemiesAlive = _participants.Any(p => !p.IsPlayer && p.Entity.IsAlive);
+        var enemies = _participants.Where(p => !p.IsPlayer).ToList();
+        var players = _participants.Where(p => p.IsPlayer).ToList();
 
-        if (!playersAlive) return (true, BattleEndReason.PlayerDefeat);
-        if (!enemiesAlive) return (true, BattleEndReason.PlayerVictory);
+        bool allEnemiesDefeated = enemies.Count > 0 && enemies.All(p => p.Status == ParticipantStatus.Defeated);
+        if (allEnemiesDefeated) return (true, BattleEndReason.PlayerVictory);
+
+        bool allPlayersDone = players.Count > 0 && players.All(p => !p.IsActive);
+        if (allPlayersDone)
+        {
+            // Escaped 済みプレイヤーは全滅判定の母数に含めない一方、1人でも Defeated を経験していれば優先する
+            bool anyDefeated = players.Any(p => p.Status == ParticipantStatus.Defeated);
+            return (true, anyDefeated ? BattleEndReason.PlayerDefeat : BattleEndReason.Escaped);
+        }
+
         return (false, default);
     }
 

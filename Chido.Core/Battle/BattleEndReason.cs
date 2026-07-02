@@ -5,5 +5,5 @@ public enum BattleEndReason
     PlayerVictory,
     PlayerDefeat,
     Escaped,
-    Timeout, // 非同期なので一定時間放置でタイムアウト
+    ChannelMissing, // チャンネル消失により戦闘の継続が不可能になった場合
 }

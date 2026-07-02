@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using Chido.Core.Battle.Damage;
 using Chido.Core.Stats;
 
 namespace Chido.Core.Entities;
@@ -18,6 +19,7 @@ public abstract class EntityBase : IEntity
     public BigInteger MDef        { get; protected set; }
     public int        Speed       { get; protected set; }
     public Ratio       Luck       { get; protected set; }
+    public Element      Element   { get; protected set; } = Element.None;
 
     public bool IsAlive => CurrentLife > BigInteger.Zero;
 

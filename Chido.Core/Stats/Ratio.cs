@@ -43,6 +43,9 @@ public readonly struct Ratio : IEquatable<Ratio>, IComparable<Ratio>
     /// <summary>value - (value の Rate%) — 割合減算</summary>
     public BigInteger SubtractFrom(BigInteger value) => value - Of(value);
 
+    /// <summary>Rate% の確率で true を返す乱数抽選 (クリティカル判定・ドロップ率判定等で使用)</summary>
+    public bool Roll(Random rng) => rng.Next(10000) < _permyriad;
+
     // --- 演算子 ---
     public static BigInteger operator *(BigInteger value, Ratio ratio) => ratio.Of(value);
     public static BigInteger operator +(BigInteger value, Ratio ratio) => ratio.AddTo(value);
