@@ -1,50 +1,49 @@
 using System;
 using System.Numerics;
-using Chido.Core.Battle.Damage.Modifiers;
 using Chido.Core.Entities;
-using Chido.Core.Stats;
 
 namespace Chido.Core.Battle.Damage;
 
 /// <summary>
-/// クリティカル判定・属性補正・スキル倍率を組み込んだ、1回の攻撃 (Attack/Skill/反撃共通) の解決処理。
+/// 攻撃パイプラインの呼び出しから、クリティカル抽選・HPへの適用・ログ整形までを1回分まとめた薄い層。
+///
+/// クリティカルの発生判定は行動側の責務であり（戦闘システム 5.2）、
+/// 行動に渡された <see cref="Random"/> をここで消費する。パイプライン自体は
+/// 抽選結果を受け取るだけで乱数に依存しない。
 /// </summary>
 public static class AttackResolver
 {
-    // 発生率・倍率は GameConstants に集約している（設計ドキュメントが「同一の定数を1箇所で参照する」ことを
-    // 要求しているため、各利用側で個別に持たない）
+    /// <summary>
+    /// 1回の攻撃を解決し、実効ダメージ（＝ min(最終ダメージ, 適用直前の現在HP)）とログを返す。
+    /// 戻り値のダメージは台帳に積む値であり、与ダメージ帰属・被攻撃TP・報酬ゲートが
+    /// 共通で参照する基準量になる（戦闘システム 6.2）。
+    /// </summary>
+    /// <param name="motionElements">
+    /// 攻撃モーションの属性。相性判定の攻撃側はスキル属性でも攻撃者の実効属性でもなく、
+    /// モーション属性である（戦闘システム 5.3）。通常攻撃は無属性。
+    /// </param>
     public static (BigInteger Damage, string Log) Resolve(
-        IEntity    attacker,
-        IEntity    defender,
+        IEntity attacker,
+        IEntity defender,
         AttackType attackType,
-        Random     rng,
-        Ratio?     skillPower           = null,
-        string?    skillName            = null,
-        Ratio?     extraMultiplier      = null,
-        string?    extraMultiplierLabel = null)
+        Random rng,
+        int power = GameConstants.PowerScale,
+        Element motionElements = Element.None,
+        string? skillName = null)
     {
-        var builder = DamageContext.Builder.FromEntity(attacker, attackType);
-
-        var elementalMultiplier = ElementAffinity.GetMultiplier(attacker.Elements, defender.Elements);
-        if (elementalMultiplier != Ratio.Full)
-            builder.AddModifier(RatioMultiplierModifier.Elemental(elementalMultiplier, attacker.Elements.ToString()));
-
-        if (skillPower is { } power)
-            builder.AddModifier(RatioMultiplierModifier.SkillPower(power, skillName ?? "スキル"));
-
         var isCritical = GameConstants.CriticalRate.Roll(rng);
-        if (isCritical)
-            builder.AddModifier(RatioMultiplierModifier.Critical(GameConstants.CriticalMultiplier));
 
-        if (extraMultiplier is { } extra)
-            builder.AddModifier(new RatioMultiplierModifier(extra, ModifierPhase.PostDefense, extraMultiplierLabel));
+        var result = AttackPipeline.Resolve(
+            attacker, defender, attackType, power,
+            motionElements: motionElements,
+            isCritical: isCritical,
+            sourceName: skillName);
 
-        var result       = DamageCalculator.Calculate(builder.Build(), defender);
-        var actualDamage = defender.TakeDamage(result.FinalDamage);
+        var effectiveDamage = defender.TakeDamage(result.FinalDamage);
 
         var critText = isCritical ? "会心の一撃！ " : string.Empty;
-        var log      = $"{attacker.Name} の攻撃！ {critText}{defender.Name} に {actualDamage} ダメージ。";
+        var log = $"{attacker.Name} の攻撃！ {critText}{defender.Name} に {effectiveDamage} ダメージ。";
 
-        return (actualDamage, log);
+        return (effectiveDamage, log);
     }
 }

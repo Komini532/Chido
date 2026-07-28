@@ -269,21 +269,4 @@ public class ElementAffinityTests
             }
         }
     }
-
-    // --- Ratio 互換シム ---
-
-    [Fact]
-    public void GetMultiplier_等倍のときはRatio_Fullを返す()
-    {
-        Assert.Equal(Ratio.Full, ElementAffinity.GetMultiplier(Element.Fire, Element.Fire));
-        Assert.Equal(Ratio.Full, ElementAffinity.GetMultiplier(Element.Fire, Element.None));
-    }
-
-    [Fact]
-    public void GetMultiplier_有利不利の倍率が相性表に従う()
-    {
-        // 火 → 草 は有利、火 → 水 は不利（表の該当セル）
-        Assert.Equal(Ratio.FromPermyriad(13000), ElementAffinity.GetMultiplier(Element.Fire, Element.Grass));
-        Assert.Equal(Ratio.FromPermyriad(7692),  ElementAffinity.GetMultiplier(Element.Fire, Element.Water));
-    }
 }

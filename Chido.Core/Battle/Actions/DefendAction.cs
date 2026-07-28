@@ -2,21 +2,27 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Chido.Core.Battle.Damage;
+using Chido.Core.Battle.Effects;
+using Chido.Core.Entities;
 using Chido.Core.Stats;
 
 namespace Chido.Core.Battle.Actions;
 
 /// <summary>
-/// 防御。CurrentTarget からの被ダメージを半減させた上で反撃を受ける (4.2)。
-/// 効果量 (現状50%) は今後の拡張で変動しうる。
+/// 防御。反撃モーションを持たず、実体は「自分自身への DRR 付与」1つである（戦闘システム 4.2）。
+/// 構えを取ったうえで CurrentTarget からの反撃を受ける。
+///
+/// 軽減は DEF への補正ではなく最終ダメージへの乗算係数として働くため、
+/// ここでは対象へ DRR の StatusModifier を載せ、実際の減算はダメージパイプラインの
+/// PostDefense が行う（戦闘システム 5.1）。
+///
+/// 状態変化のライフサイクル（duration_actions = 1 による1行動での消失）が実装されるまでの間、
+/// 付与と除去をこの行動の中で完結させている。ライフサイクルが載った時点で
+/// 「自分自身が対象・duration_actions = 1 の DRR 付与モーションを1つ持つスキル」という
+/// マスタデータへ置き換わり、この特別扱いは不要になる。
 /// </summary>
 public sealed class DefendAction : BattleActionBase
 {
-    // 被ダメージへの乗算係数 (1 - DRR)。軽減率そのものは GameConstants が持ち、ここでは係数へ変換して使う。
-    // Phase 5 で Defend を「自分自身への DRR 付与モーション1つを持つスキル」として再構成する際、
-    // この係数の算出はダメージパイプラインの PostDefense へ移る（戦闘システム 5.1・5.4）。
-    private static readonly Ratio DamageMultiplier = Ratio.Full - GameConstants.DefendDamageResistRate;
-
     public override ActionType Type => ActionType.Defend;
 
     protected override Task<BattleActionResult> ExecuteCoreAsync(
@@ -33,10 +39,19 @@ public sealed class DefendAction : BattleActionBase
 
         session.RecordAction();
 
-        var (_, log) = AttackResolver.Resolve(
-            target.Entity, actor.Entity, AttackType.Physical, rng,
-            extraMultiplier: DamageMultiplier, extraMultiplierLabel: "防御 ×50%");
-        logs.Add(log);
+        var guard = new StatusModifier(TargetStatus.DamageResistRate, GameConstants.DefendDamageResistRate);
+        var defender = actor.Entity as EntityBase;
+        defender?.AddStatusModifier(guard);
+
+        try
+        {
+            var (_, log) = AttackResolver.Resolve(target.Entity, actor.Entity, AttackType.Physical, rng);
+            logs.Add(log);
+        }
+        finally
+        {
+            defender?.RemoveStatusModifier(guard);
+        }
 
         if (!actor.Entity.IsAlive)
         {
