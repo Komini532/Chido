@@ -1,5 +1,5 @@
 using System.Numerics;
-using Chido.Core.Battle;
+using Chido.Core.Entities;
 
 namespace Chido.Data.Entities;
 

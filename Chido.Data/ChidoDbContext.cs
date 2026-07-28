@@ -194,7 +194,7 @@ public class ChidoDbContext(DbContextOptions<ChidoDbContext> options) : DbContex
                 .HasColumnName("action_type")
                 .HasColumnType("TINYINT UNSIGNED")
                 .HasConversion<byte>()
-                .HasComment("ActionType（Attack/Skill/Item/Defend/Escape）");
+                .HasComment("ActionType（Attack/Skill/Use/Defend/Escape）");
 
             e.Property(x => x.TargetId)
                 .HasColumnName("target_id")
