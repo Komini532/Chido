@@ -1,0 +1,39 @@
+name: Build and Test
+
+# ビルド/テストを回す唯一のワークフロー。
+# これが無い状態ではコンパイルエラーの検出機構がリポジトリ側に存在しなかった。
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  # 同一ブランチへの連続pushでは最新のみを走らせる（デプロイと異なり中断して問題ない）
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # 全プロジェクトが net8.0 をターゲットとしているため 8.0 の SDK を明示する
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore Chido.sln
+
+      - name: Build
+        # 復元済みの状態からビルドし、警告をログに残す
+        run: dotnet build Chido.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Chido.sln --configuration Release --no-build --verbosity normal
