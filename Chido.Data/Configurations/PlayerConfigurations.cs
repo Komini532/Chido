@@ -40,8 +40,19 @@ public class BattleStatusConfiguration : IEntityTypeConfiguration<BattleStatusRe
         e.Property(x => x.Exp)
             .HasColumnName("exp")
             .HasColumnType("VARCHAR(100)")
+            .HasCharSet("ascii")
+            .UseCollation("ascii_bin")
             .HasConversion(Converters.Numeric)
-            .HasComment("経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。設計上はランキング用に DECIMAL(65,0) だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+            .HasComment("経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。10進整数文字列。ランキングは exp_len との複合インデックスで数値順を得る（DECIMAL が使えない理由は BigIntegerToStringConverter 参照）");
+
+        e.Property(x => x.ExpLength)
+            .HasColumnName("exp_len")
+            .HasColumnType("TINYINT UNSIGNED")
+            .HasComputedColumnSql("CHAR_LENGTH(`exp`)", stored: true)
+            .HasComment("exp の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列");
+
+        // 昇順のまま張る。MySQL 8 は ORDER BY exp_len DESC, exp DESC のような全反転を昇順インデックスの逆走査で処理できる
+        e.HasIndex(x => new { x.ExpLength, x.Exp }).HasDatabaseName("idx_exp_rank");
     }
 }
 
@@ -185,8 +196,18 @@ public class PlayerCurrencyConfiguration : IEntityTypeConfiguration<PlayerCurren
         e.Property(x => x.Amount)
             .HasColumnName("amount")
             .HasColumnType("VARCHAR(100)")
+            .HasCharSet("ascii")
+            .UseCollation("ascii_bin")
             .HasConversion(Converters.Numeric)
-            .HasComment("所持金額。設計上はランキング用に DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+            .HasComment("所持金額。10進整数文字列。ランキングは amount_len との複合インデックスで数値順を得る（chido_battle_status.exp と同じ判断基準）");
+
+        e.Property(x => x.AmountLength)
+            .HasColumnName("amount_len")
+            .HasColumnType("TINYINT UNSIGNED")
+            .HasComputedColumnSql("CHAR_LENGTH(`amount`)", stored: true)
+            .HasComment("amount の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列");
+
+        e.HasIndex(x => new { x.AmountLength, x.Amount }).HasDatabaseName("idx_amount_rank");
     }
 }
 

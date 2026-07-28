@@ -35,5 +35,23 @@ dotnet ef migrations script --project Chido.Data --startup-project Chido.Data -o
   手で削除してから作り直す。
 - net8.0 のランタイムが無い環境（新しい SDK のみが入っている場合）では、
   `DOTNET_ROLL_FORWARD=LatestMajor` を設定すると `dotnet-ef` が起動できる。
-- 実DBに対する適用（`MigrateAsync()`）の確認はまだ行っていない。
-  排他制御の検証で実DBが必要になる段階で併せて確認する。
+
+## 実DBに対する適用の確認
+
+MySQL 8.0.46（`STRICT_TRANS_TABLES`）に対して適用を確認済み。全49テーブルの作成、
+`exp_len` / `amount_len` のストアド生成列、およびランキング用インデックスの逆走査
+（`Backward index scan; Using index`。`filesort` なし）まで含めて動作する。
+
+```bash
+docker run -d --name chido-mysql -e MYSQL_ROOT_PASSWORD=chido -e MYSQL_DATABASE=chido \
+  -p 13306:3306 mysql:8.0 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+
+export CHIDO_MYSQL_CONNECTION="Server=127.0.0.1;Port=13306;Database=chido;User=root;Password=chido;"
+dotnet ef database update --project Chido.Data --startup-project Chido.Data
+```
+
+CI（`.github/workflows/build.yml`）にはMySQLのサービスコンテナを置いていないため、
+この確認は手元で行う。テスト（`SchemaTests` / `RankingQueryTests`）は実DBに接続せず、
+EF Core が確定させたモデルと `ToQueryString()` を読む形で同じ内容を固定している。
+
+排他制御（`SELECT ... FOR UPDATE`）の検証は引き続き Phase 6 で行う。

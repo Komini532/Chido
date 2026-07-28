@@ -99,6 +99,35 @@
 
 属性はモーションのうち攻撃モーションのみが持つことが確定した。回復・状態変化付与・解除・戦闘離脱はモーション属性を持たない。かつて親に置く根拠としていた「モーション属性に反応する効果」（戦闘システム 11.4-4）は、「モーションに反応する効果」へ方針変更され、属性への反応は不要となった。
 
+---
+
+## 第4次改訂の要約（DECIMAL の撤回と巨大数値のソート）
+
+`DECIMAL(65,0)` が.NETから扱えないことが判明したため撤回し、巨大数値のソートを別の方式で成立させた。実装（`Chido.Data`）は既に `VARCHAR(100)` で全列を運用しており、本改訂はドキュメントを実態に合わせるとともに、失われていた「SQL側での数値順ソート」を回復させるもの。
+
+**`DECIMAL(65,0)` の撤回**
+
+原因はEF CoreやPomeloではなく、その下のMySqlConnectorにある。`DECIMAL` 列は `System.Decimal`（上限28〜29桁）へパースされるため、それを超える値は読み出し時に例外になる。`GetString` も生バイトを読み直さないため文字列で逃がすこともできない。**MySqlConnectorを使う限りPomelo・Dapper・生のADO.NETのいずれでも同じであり、ORMの乗り換えでは解決しない。** 加えて65桁という上限自体がインフレ型のゲーム性に合わない。
+
+**桁数の生成列によるソート（新方式）**
+
+非負の正準10進文字列では `(桁数, 辞書順)` が数値順に一致する。この性質を使い、桁数のストアド生成列との複合インデックスで数値順のソートを得る。詳細は「巨大数値の格納」を参照。
+
+**スキーマ変更（2テーブル）**
+
+- `chido_battle_status` に `exp_len TINYINT UNSIGNED AS (CHAR_LENGTH(exp)) STORED` と `INDEX idx_exp_rank (exp_len, exp)` を追加。`exp` を `ascii_bin` に変更
+- `chido_player_currency` に `amount_len` と `INDEX idx_amount_rank (amount_len, amount)` を追加。`amount` を `ascii_bin` に変更
+
+**型定義の修正（8列、実装済みの内容への追随）**
+
+`chido_battle_status.exp` / `chido_battle_enemy.level` / `chido_skill_master.learnable_level` / `chido_equipment_master.progression_value` / `chido_player_currency.amount` / `chido_enemy_currency_master.drop_amount` / `chido_title_master.condition_value` / `chido_channel_state.cumulative_enemy_level` を `VARCHAR(100)` に修正。`learnable_level` の「33桁」という桁数見積りの根拠（`exp` が `DECIMAL(65,0)` であること）は失効したため削除した。
+
+**帰結**
+
+- `chido_player_currency` の加減算を `UPDATE ... SET amount = amount ± X` で行う旨の記述を撤回した。読み出して `BigInteger` で計算し書き戻す
+- 100桁を超える値は書き込み時に例外になる（従来は静かに切り詰められうる状態だった）
+- 実DBに対する `MigrateAsync()` の適用をMySQL 8.0で初めて確認した（全49テーブル作成・生成列・逆走査インデックスの動作を含む）
+
 ### ID体系の使い分け
 
 | 種別 | 型 | 例 | 性質 |
@@ -107,13 +136,44 @@
 | 使い捨てID（発生の都度新規発行、再利用されない） | `BINARY(16)` (Guid) | `chido_battle_session.session_id`, `chido_battle_participant.entity_id`, `chido_battle_enemy.enemy_id`, `chido_battle_effect.instance_id`, `chido_player_effect.instance_id`, `chido_player_equipment.instance_id`, `chido_battle_enemy_equipment.instance_id` | 戦闘・参加者・敵の出現インスタンス、状態変化の付与インスタンス、装備インスタンスなど、発生の都度新規発行される実体を表す。 |
 | 可読キー（人力で編集・参照するコンテンツ定義） | `VARCHAR(64)` | `chido_item_master.item_key`, `chido_skill_master.skill_key`, `chido_enemy_master.enemy_key`, `chido_effect_master.effect_key`, `chido_equipment_master.equip_key`, `chido_enemy_group_master.group_key`, `chido_field_master.field_key` | マスタデータはGUIDより文字列キーの方がバランス調整やログ確認、AIへの指示出しの際に扱いやすい。 |
 
-### 数値型の使い分け（DECIMAL / VARCHAR）
+### 巨大数値の格納（本改訂で確定）
 
-ステータス類は`BigInteger`（C#）で扱う前提の巨大数値になりうる。用途に応じて型を分ける。
+ステータス類は`BigInteger`（C#）で扱う前提の巨大数値になりうる。**これらは例外なく`VARCHAR(100)`に10進整数文字列として格納する。**
 
-- **SQL側での比較・ソートが必要な値**（ランキング表示、閾値判定など）→ `DECIMAL(65,0) UNSIGNED`。ただしMySQLの`DECIMAL`は**精度65桁が絶対上限**であり、これを超える値は保持できない。
-- **SQL側での比較・演算が不要な値**（常にアプリ側で`BigInteger`に変換してから利用する値）→ `VARCHAR(100)`。装備やスキル倍率で乗算的に増加し65桁を超えうる値は、DECIMALでは表現できないためこちらを用いる。
-- **手動設定される基礎値で、乗算補正前の段階の値**（例: `chido_equipment_master.progression_value`）→ 実運用上65桁を超える想定がないため`DECIMAL(65,0) UNSIGNED`を採用できる。同じ「装備の強さ」に関わる値でも、乗算補正後の最終値まで含める場合はVARCHAR(100)側に倒す判断基準となる。
+**`DECIMAL(65,0)`は採用しない。** かつて本節は「SQL側での比較・ソートが必要な値は`DECIMAL(65,0) UNSIGNED`」と定めていたが、この型は.NETから扱えないことが判明したため撤回する。理由はEF CoreやPomeloの層ではなく、その下のコネクタの層にある。
+
+- MySqlConnectorは`DECIMAL`列を`Utf8Parser.TryParse(data, out decimal)`で読む。`System.Decimal`の上限は28〜29桁であり、それを超える値は**読み出し時に例外**になる。
+- `GetString(ordinal)`も生バイトを読み直さず`(string)GetValue(ordinal)`とキャストするだけなので、文字列として逃がすこともできない。
+- SELECTごとに`CAST(col AS CHAR)`を書く以外の回避手段がなく、これはMySqlConnectorを使う限りPomelo・Dapper・生のADO.NETのいずれでも同じである。ORMの乗り換えでは解決しない。
+- そもそも`DECIMAL`は精度65桁が絶対上限であり、乗算的にインフレする経験値やダメージ量にはこの上限自体が適さない。
+
+**SQL側での数値順のソートは、桁数のストアド生成列との複合インデックスで実現する。** 非負の正準10進文字列（`BigInteger.ToString()`が保証する。先頭に余分な`0`が付かない）では、**`(桁数, 辞書順)`が数値順と完全に一致する**。
+
+```sql
+exp     VARCHAR(100)     CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+exp_len TINYINT UNSIGNED AS (CHAR_LENGTH(exp)) STORED,
+INDEX idx_exp_rank (exp_len, exp)
+
+-- ORDER BY exp_len DESC, exp DESC  →  数値降順
+```
+
+インデックスは昇順のまま張る。MySQL 8は全反転（`DESC, DESC`）を昇順インデックスの逆走査で処理するため、`filesort`は発生しない（実測: `Backward index scan; Using index`）。照合順序を`ascii_bin`にするのは、照合順序に依存せず必ずバイト順で比較させるためと、インデックスを1バイト/文字に抑えるため。
+
+対象は**実際にSQL側のソートが必要な2列のみ**とする。
+
+| 列 | 生成列 | インデックス |
+|---|---|---|
+| `chido_battle_status.exp` | `exp_len` | `idx_exp_rank (exp_len, exp)` |
+| `chido_player_currency.amount` | `amount_len` | `idx_amount_rank (amount_len, amount)` |
+
+残りの巨大数値列（`chido_battle_enemy.level`、`chido_channel_state.cumulative_enemy_level`、`chido_equipment_master.progression_value`、`chido_enemy_currency_master.drop_amount`、`chido_skill_master.learnable_level`、`chido_title_master.condition_value`、`chido_battle_participant.current_hp` / `total_damage_dealt`、`chido_effect_slip_damage_instance.status_attack_value`）は、単一行の取得か小さなマスタ表の走査であり、C#側で`BigInteger`として比較すれば足りる。生成列は持たせない。
+
+**運用上の注意**
+
+- **`(桁数, 辞書順)`が数値順に一致するのは値が非負のときのみ。** 対象2列はいずれも設計上UNSIGNEDである。負値を入れると順序が壊れる。
+- **並べ替えは必ず`Chido.Data.Queries.RankingQueries`を経由する。** 桁数の項を書き忘れても例外にはならず、静かに辞書順（`"9" > "10"`）を返すため、並び順の知識をコード上の1箇所に閉じ込めている。
+- **100桁を超える値は書き込み時に例外になる**（`BigIntegerToStringConverter`）。非STRICTモードのMySQLは超過分を静かに切り詰めるため、桁が落ちた値が正しい値として流通する事故を防いでいる。符号も1文字を占める。
+- SQL側での加減算（`UPDATE ... SET amount = amount + X`）はできない。読み出して`BigInteger`で計算し、書き戻す。
 
 ### 割合値のスケールと命名規約（本改訂で確立）
 
@@ -247,9 +307,14 @@ CREATE TABLE chido_player (
 ```sql
 CREATE TABLE chido_battle_status (
     user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY, -- chido_player.user_id を参照
-    exp     DECIMAL(65,0)   NOT NULL              -- 経験値。レベルは √exp で算出。ランキング等でSQL側の比較・ソートが必要なためDECIMAL。
+    exp     VARCHAR(100)     CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                                                  -- 経験値。レベルは √exp で算出。10進整数文字列。
                                                   -- 初期値は 1。0 だと level=0 となり、
                                                   -- 基礎ステータス = レベル × Scale × Shape により全ステータスが0になって成立しない
+    exp_len TINYINT UNSIGNED AS (CHAR_LENGTH(exp)) STORED,
+                                                  -- exp の桁数。ランキングの第1ソートキー。
+                                                  -- 非負の正準10進文字列では (桁数, 辞書順) が数値順に一致する
+    INDEX idx_exp_rank (exp_len, exp)             -- ORDER BY exp_len DESC, exp DESC で数値降順を得る
 );
 ```
 
@@ -379,7 +444,7 @@ CREATE TABLE chido_battle_log (
 CREATE TABLE chido_battle_enemy (
     enemy_id   BINARY(16)             NOT NULL PRIMARY KEY, -- 出現の都度新規発行される使い捨てGuid。1つのenemy_idにつきchido_battle_participant行は常に1つのみ
     master_key VARCHAR(64)            NOT NULL,             -- chido_enemy_master.enemy_key を参照。どの敵か（種別）を示す
-    level      DECIMAL(65,0) UNSIGNED NOT NULL              -- 敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。
+    level      VARCHAR(100)           NOT NULL              -- 敵のレベル。10進整数文字列。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。
                                                             -- 組の全メンバーが同一レベルとなる（メンバーごとのレベル差は設けない）。
                                                             -- 基本ステータスはプレイヤー同様レベルから動的算出するためこれ以外は持たない
 );
@@ -437,8 +502,8 @@ CREATE TABLE chido_skill_master (
     require_tp          SMALLINT UNSIGNED NOT NULL,             -- TP消費量（0-1000）。スキル発動時に消費する。
                                                                 -- 回復モーションを含むスキルでは 200 以上とする（運用制約。戦闘システム 4.4 参照）。
                                                                 -- 166 以下では被反撃だけでTPが自給でき、回復を毎ターン撃てるため回復威力の実用帯が消滅する
-    learnable_level     DECIMAL(33,0)     UNSIGNED NULL,        -- 習得レベル。NULL=レベルアップでは習得不可（アイテム消費等、他の手段でのみ習得可能）。
-                                                                -- exp: DECIMAL(65,0)、level=√expであるため、level最大値の桁数(33桁)に基づきDECIMAL(65,0)より桁を絞っている
+    learnable_level     VARCHAR(100)      NULL,               -- 習得レベル。NULL=レベルアップでは習得不可（アイテム消費等、他の手段でのみ習得可能）。
+                                                                -- 10進整数文字列。小さなマスタ表であり、レベル閾値の判定はC#側でBigIntegerとして行う
     priority            INT               NOT NULL DEFAULT 0,   -- 行動優先度。行動順は OrderBy(priority) → ThenBy(Speed) → ThenBy(Random) で決まる（降順・先攻が先）。
                                                                 -- 既定は 0（Attack・通常スキル）。Defend には正の値を与え、Speed に関わらず被弾前に構えを取れるようにする。
                                                                 -- 戦闘システムドキュメント 4.1 を正とする
@@ -1003,9 +1068,9 @@ CREATE TABLE chido_equipment_master (
     elements          INT UNSIGNED     NOT NULL,             -- 装備が付与する属性（ビット列）。0 = 属性なし。
                                                              -- プレイヤーの本体属性は装備由来のみであり、装着中の全スロットの elements の OR で決まる。
                                                              -- 多くの装備は 0 を設定する運用を想定（属性を持つ装備は部位を限定するなど、手動でのバランス調整に委ねる）
-    progression_value DECIMAL(65,0)    UNSIGNED NOT NULL,     -- レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。
+    progression_value VARCHAR(100)     NOT NULL,              -- レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。
                                                              -- レアリティ補正(*1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。
-                                                             -- 手動設定される基礎値であり実運用上巨大化しないためDECIMAL(65,0) UNSIGNEDを採用
+                                                             -- 手動設定される基礎値。10進整数文字列であり、SQL側でのソートは不要
     hp_rate           INT              NOT NULL,             -- HP補正値。permyriad、符号あり（10000=等倍、0=このステータスに無効果、負値=デメリット装備）
     patk_rate         INT              NOT NULL,             -- 物理攻撃力補正値（同上）
     pdef_rate         INT              NOT NULL,             -- 物理防御力補正値（同上）
@@ -1109,19 +1174,23 @@ CREATE TABLE chido_battle_enemy_equipment_slot (
 
 ```sql
 CREATE TABLE chido_player_currency (
-    user_id BIGINT UNSIGNED        NOT NULL PRIMARY KEY, -- chido_player.user_id を参照
-    amount  DECIMAL(65,0) UNSIGNED NOT NULL              -- 所持金額。ランキング等でSQL側の比較・ソートが必要なためDECIMAL（chido_battle_status.expと同じ判断基準）
+    user_id    BIGINT UNSIGNED  NOT NULL PRIMARY KEY, -- chido_player.user_id を参照
+    amount     VARCHAR(100)     CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+                                                      -- 所持金額。10進整数文字列（chido_battle_status.expと同じ判断基準）
+    amount_len TINYINT UNSIGNED AS (CHAR_LENGTH(amount)) STORED,
+                                                      -- amount の桁数。ランキングの第1ソートキー
+    INDEX idx_amount_rank (amount_len, amount)        -- ORDER BY amount_len DESC, amount DESC で数値降順を得る
 );
 ```
 
-将来的に通貨単位を増やす拡張が考えられるが、その場合は本テーブルにカラムを追加する運用とする（`chido_player_equipment_slot`のスロット追加と同じ考え方）。加減算は`UPDATE ... SET amount = amount ± X`という単純なSQLで完結し、InnoDBの行ロックにより同時更新も自然に直列化される。
+将来的に通貨単位を増やす拡張が考えられるが、その場合は本テーブルにカラムを追加する運用とする（`chido_player_equipment_slot`のスロット追加と同じ考え方）。**金額は10進整数文字列であるため`UPDATE ... SET amount = amount ± X`という加減算はできない。** 読み出して`BigInteger`で計算し書き戻す形になり、同時更新の直列化は正準ロック順序のアンカー（`chido_player.user_id`）が担う。
 
 ### 32. chido_enemy_currency_master — 敵ドロップ金額マスタ
 
 ```sql
 CREATE TABLE chido_enemy_currency_master (
     enemy_key   VARCHAR(64)            NOT NULL PRIMARY KEY, -- chido_enemy_master.enemy_key を参照
-    drop_amount DECIMAL(65,0) UNSIGNED NOT NULL              -- 撃破時に確定でドロップする金額（固定値、抽選なし）。手動設定される基礎値のためDECIMAL(65,0) UNSIGNED（chido_equipment_master.progression_valueと同じ判断基準）
+    drop_amount VARCHAR(100)           NOT NULL              -- 撃破時に確定でドロップする金額（固定値、抽選なし）。手動設定される基礎値。10進整数文字列（chido_equipment_master.progression_valueと同じ判断基準）
 );
 ```
 
@@ -1136,7 +1205,7 @@ CREATE TABLE chido_title_master (
     emoji            VARCHAR(64)            NOT NULL,             -- 表示用絵文字。Unicode文字、またはDiscordカスタム絵文字の完成済みタグ文字列(<:name:id>)をそのまま格納
     acquisition_type TINYINT UNSIGNED       NOT NULL,             -- 入手条件種別（0: 特定アイテム獲得, 1: 特定敵撃破, 2: レベル到達, 3: 所持金額到達）。今後拡張予定
     condition_key    VARCHAR(64)            NULL,                 -- 判定値(識別ID形式)。acquisition_type=0→item_key, 1→enemy_keyを参照（参照先はacquisition_typeにより分岐）
-    condition_value  DECIMAL(65,0) UNSIGNED NULL                  -- 判定値(数値)。acquisition_type=2→レベル閾値、3→所持金額閾値。比較対象（exp由来のレベル、chido_player_currency.amount）と型を揃えている
+    condition_value  VARCHAR(100)           NULL                  -- 判定値(数値)。acquisition_type=2→レベル閾値、3→所持金額閾値。10進整数文字列であり、比較対象（exp由来のレベル、chido_player_currency.amount）と型を揃えている。閾値判定はC#側でBigIntegerとして行う
 );
 ```
 
@@ -1205,7 +1274,7 @@ CREATE TABLE chido_channel_state (
                                                                         -- 行の存在自体が「このチャンネルは戦闘チャンネルである」ことを意味する。
                                                                         -- 常に行が存在するため、チャンネルに関する悲観ロックのアンカーとして使用する
     current_field_key      VARCHAR(64)            NOT NULL,             -- chido_field_master.field_key を参照。現在のフィールド
-    cumulative_enemy_level DECIMAL(65,0) UNSIGNED NOT NULL,             -- 累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。
+    cumulative_enemy_level VARCHAR(100)           NOT NULL,             -- 累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。10進整数文字列。
                                                                         -- 出現する敵の level にそのまま複製される。
                                                                         -- この値が 2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）
     current_session_id     BINARY(16)             NULL                  -- chido_battle_session.session_id を参照。NULL=進行中のセッションなし。
@@ -1419,7 +1488,7 @@ CREATE TABLE chido_effect_element_grant_master (
 
 | # | 項目 | 波及先 |
 |---|---|---|
-| **G-1** | 参加者ごとの累積与ダメージの保持場所。`chido_battle_log.payload`(JSON)からの集計とするか、`chido_battle_participant`に専用列（例: `total_damage_dealt VARCHAR(100)`）を持たせるか | 戦闘システム 6.2 で確定した経験値按分式の入力。4番の列構成 |
+| **G-1** | 参加者ごとの累積与ダメージの保持場所。`chido_battle_log.payload`(JSON)からの集計とするか、`chido_battle_participant`に専用列（例: `total_damage_dealt VARCHAR(100)`）を持たせるか。**実装は既に専用列（`chido_battle_participant.total_damage_dealt VARCHAR(100)`）を持っており、後者に倒れている。** 本項目を正式に解消とするかは戦闘システム側の判断待ち | 戦闘システム 6.2 で確定した経験値按分式の入力。4番の列構成 |
 | **H-3** | `chido_effect_element_grant_instance`の要否。インスタンス側が可変値を持たないのであれば、`chido_effect_disable_move_master`と同じくマスタのみで完結する | 新規テーブルの要否 |
 | **I-3** | `chido_battle_log`のログ粒度。1行=1ターンか、1行=1モーションか（1スキルが複数モーションを持つため） | G-1の解決方法によっては先に決める必要がある |
 | **I-4** | `chido_battle_session.last_action_at`の存否。`Timeout`廃止により用途が消失している | 列の削除、または用途の再定義 |

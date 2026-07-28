@@ -11,7 +11,8 @@ internal static class Converters
 {
     /// <summary>
     /// BigInteger ⇔ 10進整数文字列。格納先は必ず VARCHAR(100)。
-    /// DECIMAL 列には使えない理由は BigIntegerToStringConverter を参照。
+    /// DECIMAL 列が使えない理由（EF Core ではなく MySqlConnector 側の制約）は BigIntegerToStringConverter を参照。
+    /// SQL側で数値順のソートが必要な列は Chido.Data.Queries.RankingQueries を経由すること。
     /// </summary>
     public static readonly BigIntegerToStringConverter Numeric = new();
 

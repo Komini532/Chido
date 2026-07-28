@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -15,5 +16,5 @@ namespace Chido.Data.Conversions;
 /// </summary>
 public sealed class NullableBigIntegerToStringConverter()
     : ValueConverter<BigInteger?, string?>(
-        v => v == null ? null : v.Value.ToString(),
-        v => v == null ? null : BigInteger.Parse(v));
+        v => v == null ? null : BigIntegerText.ToStorage(v.Value),
+        v => v == null ? null : BigInteger.Parse(v, CultureInfo.InvariantCulture));

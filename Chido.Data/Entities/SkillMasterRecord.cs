@@ -34,7 +34,7 @@ public class SkillMasterRecord
 
     /// <summary>
     /// 習得レベル。NULL=レベルアップでは習得不可（アイテム消費等の他の手段でのみ習得可能）。
-    /// exp が DECIMAL(65,0) で level=√exp であるため、レベル最大値の桁数に基づき DECIMAL(33,0) に絞っている。
+    /// 10進整数文字列として VARCHAR(100) に格納する。小さなマスタ表であり、レベル閾値の判定は C# 側で BigInteger として行う。
     /// </summary>
     public BigInteger? LearnableLevel { get; set; }
 

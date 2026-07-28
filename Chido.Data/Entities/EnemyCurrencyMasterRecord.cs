@@ -13,7 +13,7 @@ public class EnemyCurrencyMasterRecord
     /// <summary>
     /// 撃破時に確定でドロップする金額（固定値、抽選なし）。
     /// 手動設定される基礎値であり蓄積後の所持金額そのものではないため、
-    /// chido_player_currency.amount の型とは独立した判断で DECIMAL(65,0) UNSIGNED としている。
+    /// 10進整数文字列として VARCHAR(100) に格納する。SQL側でのソートは不要なため桁数の生成列は持たない。
     /// </summary>
     public BigInteger DropAmount { get; set; }
 }

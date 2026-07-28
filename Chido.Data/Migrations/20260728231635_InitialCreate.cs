@@ -42,7 +42,7 @@ namespace Chido.Data.Migrations
                     enemy_id = table.Column<byte[]>(type: "BINARY(16)", nullable: false, comment: "出現の都度新規発行される使い捨てGuid。1つのenemy_idにつきchido_battle_participant行は常に1つのみ"),
                     master_key = table.Column<string>(type: "VARCHAR(64)", nullable: false, comment: "chido_enemy_master.enemy_key を参照。どの敵か（種別）を示す")
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    level = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）")
+                    level = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。10進整数文字列（BigIntegerToStringConverter 参照）")
                         .Annotation("MySql:CharSet", "utf8mb4")
                 },
                 constraints: table =>
@@ -153,8 +153,9 @@ namespace Chido.Data.Migrations
                 columns: table => new
                 {
                     user_id = table.Column<ulong>(type: "bigint unsigned", nullable: false, comment: "chido_player.user_id を参照"),
-                    exp = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。設計上はランキング用に DECIMAL(65,0) だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）")
-                        .Annotation("MySql:CharSet", "utf8mb4")
+                    exp = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。10進整数文字列。ランキングは exp_len との複合インデックスで数値順を得る（DECIMAL が使えない理由は BigIntegerToStringConverter 参照）", collation: "ascii_bin")
+                        .Annotation("MySql:CharSet", "ascii"),
+                    exp_len = table.Column<byte>(type: "TINYINT UNSIGNED", nullable: false, computedColumnSql: "CHAR_LENGTH(`exp`)", stored: true, comment: "exp の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列")
                 },
                 constraints: table =>
                 {
@@ -183,7 +184,7 @@ namespace Chido.Data.Migrations
                     channel_id = table.Column<ulong>(type: "bigint unsigned", nullable: false, comment: "DiscordチャンネルID。行の存在自体が「このチャンネルは戦闘チャンネルである」ことを意味する。常に行が存在するため、チャンネルに関する悲観ロックのアンカーとして使用する"),
                     current_field_key = table.Column<string>(type: "VARCHAR(64)", nullable: false, comment: "chido_field_master.field_key を参照。現在のフィールド")
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    cumulative_enemy_level = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）")
+                    cumulative_enemy_level = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。10進整数文字列（BigIntegerToStringConverter 参照）")
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     current_session_id = table.Column<byte[]>(type: "BINARY(16)", nullable: true, comment: "chido_battle_session.session_id を参照。NULL=進行中のセッションなし。1チャンネル1行という構造により「アクティブなセッションは1つ以下」が導かれ、セッション生成レースを本行のロックで直列化できる")
                 },
@@ -305,7 +306,7 @@ namespace Chido.Data.Migrations
                 {
                     enemy_key = table.Column<string>(type: "VARCHAR(64)", nullable: false, comment: "chido_enemy_master.enemy_key を参照")
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    drop_amount = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "撃破時に確定でドロップする金額（固定値、抽選なし）。設計上は DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）")
+                    drop_amount = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "撃破時に確定でドロップする金額（固定値、抽選なし）。10進整数文字列（BigIntegerToStringConverter 参照）")
                         .Annotation("MySql:CharSet", "utf8mb4")
                 },
                 constraints: table =>
@@ -458,7 +459,7 @@ namespace Chido.Data.Migrations
                     equip_parts = table.Column<uint>(type: "INT UNSIGNED", nullable: false, comment: "装備可能パーツ（ビット列。weapon/head/chest/legs/accessory）。スロットの種別（候補）を表すものであり物理カラムと1対1対応する保証はない（択一の候補提示を許容する）"),
                     rarity = table.Column<byte>(type: "TINYINT UNSIGNED", nullable: false, comment: "装備レアリティ（0〜4）。chido_enemy_master.rarity と共通のenum。同一進行度内での強さの序列付けに使用"),
                     elements = table.Column<uint>(type: "INT UNSIGNED", nullable: false, comment: "装備が付与する属性（ビット列）。0 = 属性なし。プレイヤーの本体属性は装備由来のみであり、装着中の全スロットの elements の OR で決まる"),
-                    progression_value = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）")
+                    progression_value = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。10進整数文字列（BigIntegerToStringConverter 参照）")
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     hp_rate = table.Column<int>(type: "INT", nullable: false, comment: "HP補正値。permyriad、符号あり（10000=等倍、0=このステータスに無効果、負値=デメリット装備）"),
                     patk_rate = table.Column<int>(type: "INT", nullable: false, comment: "物理攻撃力補正値（同上）"),
@@ -592,8 +593,9 @@ namespace Chido.Data.Migrations
                 columns: table => new
                 {
                     user_id = table.Column<ulong>(type: "bigint unsigned", nullable: false, comment: "chido_player.user_id を参照"),
-                    amount = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "所持金額。設計上はランキング用に DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）")
-                        .Annotation("MySql:CharSet", "utf8mb4")
+                    amount = table.Column<string>(type: "VARCHAR(100)", nullable: false, comment: "所持金額。10進整数文字列。ランキングは amount_len との複合インデックスで数値順を得る（chido_battle_status.exp と同じ判断基準）", collation: "ascii_bin")
+                        .Annotation("MySql:CharSet", "ascii"),
+                    amount_len = table.Column<byte>(type: "TINYINT UNSIGNED", nullable: false, computedColumnSql: "CHAR_LENGTH(`amount`)", stored: true, comment: "amount の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列")
                 },
                 constraints: table =>
                 {
@@ -737,7 +739,7 @@ namespace Chido.Data.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     elements = table.Column<uint>(type: "INT UNSIGNED", nullable: false, comment: "スキル属性（ビット列）。ダメージ計算には一切使用しない、UI表示専用の\"見せかけ\"の値。ダメージ計算が参照するのは chido_skill_motion_attack_master.elements"),
                     require_tp = table.Column<ushort>(type: "SMALLINT UNSIGNED", nullable: false, comment: "TP消費量（0-1000）。回復モーションを含むスキルでは 200 以上とする（運用制約）。166 以下では被反撃だけでTPが自給でき回復威力の実用帯が消滅する"),
-                    learnable_level = table.Column<string>(type: "VARCHAR(100)", nullable: true, comment: "習得レベル。NULL=レベルアップでは習得不可。設計上は DECIMAL(33,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）")
+                    learnable_level = table.Column<string>(type: "VARCHAR(100)", nullable: true, comment: "習得レベル。NULL=レベルアップでは習得不可。10進整数文字列。レベル閾値の判定は C# 側で行う（BigIntegerToStringConverter 参照）")
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     priority = table.Column<int>(type: "INT", nullable: false, defaultValue: 0, comment: "行動優先度。行動順は priority 降順 → Speed → Random。既定は 0（Attack・通常スキル）。Defend には正の値を与え、Speed に関わらず被弾前に構えを取れるようにする"),
                     special_process_key = table.Column<string>(type: "VARCHAR(64)", nullable: true, comment: "特殊処理呼び出し記号。NULL=標準の効果計算処理のみで完結")
@@ -925,6 +927,11 @@ namespace Chido.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "idx_exp_rank",
+                table: "chido_battle_status",
+                columns: new[] { "exp_len", "exp" });
+
+            migrationBuilder.CreateIndex(
                 name: "uk_enemy_effect",
                 table: "chido_enemy_effects_master",
                 columns: new[] { "enemy_key", "effect_key" },
@@ -934,6 +941,11 @@ namespace Chido.Data.Migrations
                 name: "idx_field_rarity",
                 table: "chido_field_enemy_group_master",
                 columns: new[] { "field_key", "rarity" });
+
+            migrationBuilder.CreateIndex(
+                name: "idx_amount_rank",
+                table: "chido_player_currency",
+                columns: new[] { "amount_len", "amount" });
 
             migrationBuilder.CreateIndex(
                 name: "idx_user_equip",
