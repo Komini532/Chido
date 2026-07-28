@@ -1,0 +1,56 @@
+# Chido のコーディング規約。
+# 既存コード（Chido.Core / Chido.Data / Chido）で実際に使われているスタイルを明文化したものであり、
+# 新しい規約を導入するものではない。Windows 11 と Ubuntu の双方で編集されるため改行コードも固定する。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,csproj,props,targets,sln}]
+indent_size = 2
+
+[*.md]
+# Markdown は行末2スペースが改行を意味するため、末尾空白の除去を無効化する
+trim_trailing_whitespace = false
+
+[*.sln]
+indent_style = tab
+
+[*.cs]
+# --- using ---
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:suggestion
+
+# --- 名前空間 ---
+# 既存の全ファイルがファイルスコープ名前空間（namespace X;）を使用している
+csharp_style_namespace_declarations = file_scoped:warning
+
+# --- var ---
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:silent
+
+# --- 式形式メンバー ---
+# Ratio や EntityBase で多用されている
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+
+# --- 波括弧・改行 ---
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:suggestion
+
+# --- 命名規則 ---
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_prefix
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_prefix.required_prefix = _
+dotnet_naming_style.underscore_prefix.capitalization = camel_case
