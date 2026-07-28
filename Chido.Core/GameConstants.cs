@@ -151,4 +151,16 @@ public static class GameConstants
 
     /// <summary>属性補正 1.3^x を有理数で表すための分母。</summary>
     public const int ElementAffinityDenominator = 10;
+
+    // --- 装備（戦闘システム 2.3・2.5、DB設計25番） ---
+
+    /// <summary>
+    /// 装備のレアリティ補正 1.2^rarity を有理数で表すための分子。
+    /// 1スロットの補正値 = progression_value × 1.2^rarity × *_rate であり、
+    /// 属性補正と同じく浮動小数点を通さずに累乗するため分数で保持する。
+    /// </summary>
+    public const int RarityMultiplierNumerator = 6;
+
+    /// <summary>装備のレアリティ補正 1.2^rarity を有理数で表すための分母。</summary>
+    public const int RarityMultiplierDenominator = 5;
 }

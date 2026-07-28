@@ -1,33 +1,31 @@
+using System.Numerics;
 using Chido.Core.Battle.Damage;
+using Chido.Core.Entities;
 
 namespace Chido.Core.Stats;
 
 /// <summary>
-/// 装着中の装備1つ分の補正。chido_equipment_master の補正列に1対1で対応する。
+/// 装着中の装備1つ分。chido_equipment_master の列に1対1で対応する。
 ///
-/// 補正の表現形式はステータスにより3通りに分かれる（戦闘システム 2.3・2.5）。
+/// HP・攻撃力・防御力については、この1件が供給する補正値そのものが
+/// <c>progression_value × 1.2^rarity × *_rate</c> で算出される（DB設計25番）。
+/// 算出された補正値が装備レイヤーの加算合成 <c>1 + Σ(各スロットの補正値)</c> に入る（戦闘システム 2.3）。
+/// 2つの式は入れ子の関係にあり、前者が1スロット分の補正値を、後者がレイヤー全体の倍率を定める。
+///
+/// Speed と Luck はこの乗算構造の対象外であり、<c>progression_value</c> と <c>rarity</c> による
+/// スケーリングを受けない（戦闘システム 2.3・2.5）。
 /// <list type="bullet">
-///   <item>HP・攻撃力・防御力 … +%（割増）。同一レイヤー内で加算合成され、1つの乗算項になる</item>
-///   <item>Speed … 絶対値の加減算（例: +50 / -30）。Scale × Shape の枠組みの外</item>
-///   <item>Luck  … %ポイントの加算（例: +5% → 500）。乗算ではない</item>
+///   <item>HP・攻撃力・防御力 … +%（割増）。progression_value × 1.2^rarity でスケールされる</item>
+///   <item>Speed … 絶対値の加減算（例: +50 / -30）。生の値をそのまま加算する</item>
+///   <item>Luck  … %ポイントの加算（例: +5% → 500）。生の値をそのまま加算する</item>
 /// </list>
 ///
 /// 補正値は負値を取りうる（デメリット装備）。他の計算式に渡す前提の中間値であり、
 /// 最終ステータスそのものではないため、この段階でのクランプは行わない。
-///
-/// <para>
-/// <b>chido_equipment_master.progression_value / rarity は本型に含めていない。</b>
-/// DB設計25番は「HP・攻撃・防御は P(level) × 1.2^rarity × 補正値 で最終値を算出する<i>想定</i>」と
-/// 記しているが、戦闘システム 2.3 は決定事項として装備補正を
-/// 「1 + Σ(各スロットの補正値)」という乗算レイヤーと定めており、両者は両立しない
-/// （前者は絶対値の供給、後者は倍率の供給）。
-/// 戦闘ロジックの正は戦闘システムドキュメントであるため後者を実装している。
-/// また progression_value は装備ごとの固定スカラーであり、保持者の現在レベルに応じた
-/// P(level) を実行時に再評価できないため、そもそも実行時の乗算には使えない。
-/// 装備を作成する際に適切な補正値を導くための設計上の目安と解釈している。
-/// </para>
 /// </summary>
 public readonly record struct EquipmentBonus(
+    BigInteger ProgressionValue,
+    Rarity Rarity,
     Ratio MaxLifeRate,
     Ratio PAtkRate,
     Ratio PDefRate,
@@ -37,7 +35,19 @@ public readonly record struct EquipmentBonus(
     Ratio LuckBonusRate,
     Element Elements)
 {
-    /// <summary>補正を一切持たない装備。テストやスロット未装着の表現に使う。</summary>
+    /// <summary>
+    /// 補正を一切持たない装備。進行度が 0 のため、HP・攻撃力・防御力への寄与も 0 になる。
+    /// スロット未装着の表現やテストの基点に使う。
+    /// </summary>
     public static readonly EquipmentBonus None = new(
-        Ratio.Zero, Ratio.Zero, Ratio.Zero, Ratio.Zero, Ratio.Zero, 0, Ratio.Zero, Element.None);
+        BigInteger.Zero, Rarity.Common,
+        Ratio.Zero, Ratio.Zero, Ratio.Zero, Ratio.Zero, Ratio.Zero,
+        0, Ratio.Zero, Element.None);
+
+    /// <summary>
+    /// 指定ステータスに対する、このスロット1件分の補正値（permyriad）。
+    /// 装備レイヤーの Σ に加算される項であり、<see cref="StatCalculator.EquipmentContribution"/> で算出する。
+    /// </summary>
+    public BigInteger ContributionOf(Ratio rate)
+        => StatCalculator.EquipmentContribution(ProgressionValue, Rarity, rate);
 }
