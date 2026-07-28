@@ -73,7 +73,18 @@ public class BattleSession
     }
 
     // --- 終了判定 ---
-    // 発生順序に依存しない、各 ParticipantStatus の最終状態のみを見る集計ベースの判定
+    // 「戦闘不能」であること自体は終了トリガーに含めない（戦闘システム 4.3）。
+    // 非同期・飛び入り参加前提では参加者の総数がそもそも確定しないため、戦闘不能を含めると
+    // 「最初の1人が参加してそのまま戦闘不能になっただけでセッションが終了する」ことになり、
+    // 飛び入り参加の前提と矛盾する。全参加者が戦闘不能でもセッションは終了せず、
+    // 新規参加者が仕留めに来るか、全員が改めて Escape を選択するまで残り続ける。
+    //
+    // ここでいう「0人になる」はリストの行数が0になることではなく、該当する側の全参加者の状態が
+    // 揃うことを指す（参加者行は物理削除されない）。
+    //
+    // [Phase 5c で対応] EnemyEscaped（敵側の生存が0で、最後の1体の消失原因が Escaped）は
+    // 状態分布だけでは PlayerVictory と区別できず、「最後の1体がどちらで消えたか」の追跡を要する。
+    // トリガーが発火した時点で終了理由を記録する仕組みと併せてセッション終了処理に実装する。
     public (bool ended, BattleEndReason reason) CheckEndCondition()
     {
         var enemies = _participants.Where(p => !p.IsPlayer).ToList();
@@ -82,13 +93,9 @@ public class BattleSession
         bool allEnemiesDefeated = enemies.Count > 0 && enemies.All(p => p.Status == ParticipantStatus.Defeated);
         if (allEnemiesDefeated) return (true, BattleEndReason.PlayerVictory);
 
-        bool allPlayersDone = players.Count > 0 && players.All(p => !p.IsActive);
-        if (allPlayersDone)
-        {
-            // Escaped 済みプレイヤーは全滅判定の母数に含めない一方、1人でも Defeated を経験していれば優先する
-            bool anyDefeated = players.Any(p => p.Status == ParticipantStatus.Defeated);
-            return (true, anyDefeated ? BattleEndReason.PlayerDefeat : BattleEndReason.Escaped);
-        }
+        // 能動的な選択である Escape のみがトリガー。Defeated が混ざっている間は終了しない
+        bool allPlayersEscaped = players.Count > 0 && players.All(p => p.Status == ParticipantStatus.Escaped);
+        if (allPlayersEscaped) return (true, BattleEndReason.PlayerEscaped);
 
         return (false, default);
     }
