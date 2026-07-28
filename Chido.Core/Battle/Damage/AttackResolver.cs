@@ -25,9 +25,9 @@ public static class AttackResolver
     {
         var builder = DamageContext.Builder.FromEntity(attacker, attackType);
 
-        var elementalMultiplier = ElementAffinity.GetMultiplier(attacker.Element, defender.Element);
+        var elementalMultiplier = ElementAffinity.GetMultiplier(attacker.Elements, defender.Elements);
         if (elementalMultiplier != Ratio.Full)
-            builder.AddModifier(RatioMultiplierModifier.Elemental(elementalMultiplier, attacker.Element.ToString()));
+            builder.AddModifier(RatioMultiplierModifier.Elemental(elementalMultiplier, attacker.Elements.ToString()));
 
         if (skillPower is { } power)
             builder.AddModifier(RatioMultiplierModifier.SkillPower(power, skillName ?? "スキル"));
