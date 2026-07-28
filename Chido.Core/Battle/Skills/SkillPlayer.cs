@@ -115,7 +115,34 @@ public sealed class SkillPlayer(IMotionEffectApplier? effectApplier = null)
 
         // ステップ5: 効果適用
         Apply(actor, skill, motion, target, rng, onDamageDealt, logs);
+
+        GainTpOnMotionPlayed(actor, skill, motion);
+
         return MotionOutcome.Applied;
+    }
+
+    /// <summary>
+    /// 通常攻撃・防御によるTP蓄積（戦闘システム 4.4）。
+    ///
+    /// <b>契機は ActionType でも skill_key の選択時点でもなく、モーションが効果適用に到達したこと。</b>
+    /// これにより敵スキル選択における「登録された通常攻撃」と「フォールバックの通常攻撃」の
+    /// 両経路が同一の1点に合流し、どちらのAttackかを判定する分岐が下流から消える。
+    ///
+    /// 命中判定を外したモーションはここに到達しないため +100 も発生しない
+    /// （「再生されなかったものはTPを生まない」という単一の規則で閉じる）。同じ理由で、
+    /// 行動不能でモーション再生ごとスキップされた場合も +100 は構造的に発生しない。
+    /// なお Attack・Defend の accuracy_rate は 10000 固定という運用制約があるため、
+    /// この2つが確率で空振りすることは実際には起こらない。
+    /// </summary>
+    private static void GainTpOnMotionPlayed(BattleParticipant actor, Skill skill, SkillMotion motion)
+    {
+        // 判定に使う skill_key は GameConstants に集約されている。
+        // TP契機・習得管理除外・Priority 既定値の3者が同じ定数を参照する
+        if (skill.SkillKey == GameConstants.AttackSkillKey && motion is AttackMotion)
+            actor.GainTp(GameConstants.TpGainOnAttackMotion);
+
+        else if (skill.SkillKey == GameConstants.DefendSkillKey && motion is GrantEffectMotion)
+            actor.GainTp(GameConstants.TpGainOnDefendMotion);
     }
 
     private void Apply(
@@ -136,6 +163,10 @@ public sealed class SkillPlayer(IMotionEffectApplier? effectApplier = null)
                     power: attack.Power, motionElements: attack.Elements);
 
                 logs.Add(log);
+
+                // 被攻撃TPは被弾側に蓄積する。台帳への計上（onDamageDealt）とは独立に、
+                // 実効ダメージが確定した時点で必ず起きる（呼び出し側が台帳を繋いでいなくても働く）
+                target.GainTpOnDamaged(damage);
                 onDamageDealt?.Invoke(actor, target, damage);
 
                 if (!target.Entity.IsAlive)
