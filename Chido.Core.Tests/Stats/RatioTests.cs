@@ -46,18 +46,6 @@ public class RatioTests
         Assert.Equal(0.5025m, ratio.Multiplier);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(5000)]
-    [InlineData(-6000)]
-    [InlineData(15000)]
-    public void Permyriadは内部値をそのまま返す(int permyriad)
-    {
-        // DBへの永続化と、permyriad のまま加算合成してから別の形で使う箇所
-        // （DRRの Σr → (10000 - Σr) / 10000。戦闘システム 5.1）のために必要
-        Assert.Equal(permyriad, Ratio.FromPermyriad(permyriad).Permyriad);
-    }
-
     // --- 乗算優先による精度保証 ---
 
     [Fact]

@@ -11,8 +11,9 @@ namespace Chido.Core.Battle.Damage;
 /// </summary>
 public static class AttackResolver
 {
-    // 発生率・倍率は GameConstants に集約している（設計ドキュメントが「同一の定数を1箇所で参照する」ことを
-    // 要求しているため、各利用側で個別に持たない）
+    public static readonly Ratio CriticalRate       = Ratio.FromPercent(4m);
+    public static readonly Ratio CriticalMultiplier = Ratio.FromMultiplier(1.5m);
+
     public static (BigInteger Damage, string Log) Resolve(
         IEntity    attacker,
         IEntity    defender,
@@ -32,9 +33,9 @@ public static class AttackResolver
         if (skillPower is { } power)
             builder.AddModifier(RatioMultiplierModifier.SkillPower(power, skillName ?? "スキル"));
 
-        var isCritical = GameConstants.CriticalRate.Roll(rng);
+        var isCritical = CriticalRate.Roll(rng);
         if (isCritical)
-            builder.AddModifier(RatioMultiplierModifier.Critical(GameConstants.CriticalMultiplier));
+            builder.AddModifier(RatioMultiplierModifier.Critical(CriticalMultiplier));
 
         if (extraMultiplier is { } extra)
             builder.AddModifier(new RatioMultiplierModifier(extra, ModifierPhase.PostDefense, extraMultiplierLabel));

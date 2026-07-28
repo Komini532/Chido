@@ -12,10 +12,7 @@ namespace Chido.Core.Battle.Actions;
 /// </summary>
 public sealed class DefendAction : BattleActionBase
 {
-    // 被ダメージへの乗算係数 (1 - DRR)。軽減率そのものは GameConstants が持ち、ここでは係数へ変換して使う。
-    // Phase 5 で Defend を「自分自身への DRR 付与モーション1つを持つスキル」として再構成する際、
-    // この係数の算出はダメージパイプラインの PostDefense へ移る（戦闘システム 5.1・5.4）。
-    private static readonly Ratio DamageMultiplier = Ratio.Full - GameConstants.DefendDamageResistRate;
+    public static readonly Ratio DamageMultiplier = Ratio.FromPercent(50m); // 被ダメージ半減
 
     public override ActionType Type => ActionType.Defend;
 
