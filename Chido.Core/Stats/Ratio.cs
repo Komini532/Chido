@@ -31,6 +31,13 @@ public readonly struct Ratio : IEquatable<Ratio>, IComparable<Ratio>
     public decimal Percent    => _permyriad / 100m;   // 5025 → 50.25
     public decimal Multiplier => _permyriad / 10000m; // 5025 → 0.5025
 
+    /// <summary>
+    /// 内部の permyriad 値。DBへの永続化と、permyriad のまま加算合成してから
+    /// 別の形で使う箇所（DRRの Σr → (10000 - Σr) / 10000）のために公開する。
+    /// 通常の割合演算には Of / AddTo / SubtractFrom を使うこと。
+    /// </summary>
+    public int Permyriad => _permyriad;
+
     // --- BigInteger 演算メソッド ---
     // 乗算を先に行い精度を保持 (value / 10000 * rate は NG)
 

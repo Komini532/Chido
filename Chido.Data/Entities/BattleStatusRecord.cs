@@ -12,13 +12,13 @@ public class BattleStatusRecord
     public ulong UserId { get; set; }
 
     /// <summary>
-    /// 経験値。レベルは √exp で算出。ランキング等でSQL側の比較・ソートが必要なため DECIMAL(65,0)。
+    /// 経験値。レベルは √exp で算出（Chido.Core.Stats.LevelCalculator）。
+    /// ランキング等でSQL側の比較・ソートが必要なため DECIMAL(65,0)。
+    /// 初期値は GameConstants.InitialExp（= 1）。0 だと level=0 となり基礎ステータスが全て0になって成立しない。
     /// </summary>
     public BigInteger Exp { get; set; }
 
-    /// <summary>
-    /// 現在HP。最大値(MaxLife)はレベルから動的算出されるためDB単体で比較する意味がなく、
-    /// 常にアプリ側でBigIntegerとして扱う前提の文字列型(VARCHAR(100))。
-    /// </summary>
-    public BigInteger CurrentHp { get; set; }
+    // current_hp は持たない（設計ドキュメント 2番）。現在HPの真値は chido_battle_participant.current_hp のみで、
+    // 戦闘ごとに全快する仕様のもとでは非戦闘時に保持すべき値が存在しない。
+    // 参加中セッションの参照は chido_player_in_battle_session（36番）が担う。
 }
