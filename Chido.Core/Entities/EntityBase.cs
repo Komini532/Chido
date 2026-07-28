@@ -68,14 +68,17 @@ public abstract class EntityBase : IEntity
     public BigInteger MDef => CombatStat(
         GameConstants.DefenseScale, Shape.MDef, EquipmentSum(e => e.MDefRate), TargetStatus.MDef);
 
+    // Speed と Luck は progression_value × 1.2^rarity のスケーリングを受けず、装備の生の値を加算する
     public int Speed => StatCalculator.Speed(BaseSpeed, _equipment.Sum(e => e.SpeedBonus));
 
-    public Ratio Luck => StatCalculator.Luck(GameConstants.BaseLuck, EquipmentSum(e => e.LuckBonusRate));
+    public Ratio Luck => StatCalculator.Luck(
+        GameConstants.BaseLuck,
+        _equipment.Aggregate(Ratio.Zero, (acc, e) => acc + e.LuckBonusRate));
 
     public Element Elements =>
         InnateElements | _equipment.Aggregate(Element.None, (acc, e) => acc | e.Elements) | _grantedElements;
 
-    public Ratio DamageResistRate => StatusSum(TargetStatus.DamageResistRate);
+    public Ratio DamageResistRate => ToRatio(StatusSum(TargetStatus.DamageResistRate));
 
     // --- 現在HP ---
 
@@ -177,14 +180,30 @@ public abstract class EntityBase : IEntity
 
     // --- 内部 ---
 
-    private BigInteger CombatStat(int scale, int shape, Ratio equipmentSum, TargetStatus targetStatus)
+    private BigInteger CombatStat(int scale, int shape, BigInteger equipmentSum, TargetStatus targetStatus)
         => StatCalculator.CombatStat(Level, scale, shape, StrengthRate, equipmentSum, StatusSum(targetStatus));
 
-    private Ratio EquipmentSum(Func<EquipmentBonus, Ratio> selector)
-        => _equipment.Aggregate(Ratio.Zero, (acc, e) => acc + selector(e));
+    /// <summary>
+    /// 装備レイヤーの Σ（permyriad）。各スロットの補正値は
+    /// progression_value × 1.2^rarity × rate で算出されるため、合計は int に収まらず BigInteger になる。
+    /// </summary>
+    private BigInteger EquipmentSum(Func<EquipmentBonus, Ratio> selector)
+        => _equipment.Aggregate(BigInteger.Zero, (acc, e) => acc + e.ContributionOf(selector(e)));
 
-    private Ratio StatusSum(TargetStatus targetStatus)
+    /// <summary>状態変化レイヤーの Σ（permyriad）。装備側と型を揃えるため BigInteger で合算する。</summary>
+    private BigInteger StatusSum(TargetStatus targetStatus)
         => _statusModifiers
             .Where(m => m.TargetStatus == targetStatus)
-            .Aggregate(Ratio.Zero, (acc, m) => acc + m.Rate);
+            .Aggregate(BigInteger.Zero, (acc, m) => acc + m.Rate.Permyriad);
+
+    /// <summary>
+    /// permyriad の合計を Ratio へ戻す。Ratio の内部表現は int のため、
+    /// 現実には起こらないが範囲外になった場合は飽和させる（例外で戦闘を止めない）。
+    /// </summary>
+    private static Ratio ToRatio(BigInteger permyriad)
+    {
+        if (permyriad > int.MaxValue) return Ratio.FromPermyriad(int.MaxValue);
+        if (permyriad < int.MinValue) return Ratio.FromPermyriad(int.MinValue);
+        return Ratio.FromPermyriad((int)permyriad);
+    }
 }

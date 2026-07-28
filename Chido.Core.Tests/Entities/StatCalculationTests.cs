@@ -24,6 +24,14 @@ public class StatCalculationTests
     /// <summary>指定レベルのプレイヤー。exp = level² により floor(√exp) = level となる。</summary>
     private static Player PlayerAtLevel(int level) => NewPlayer(new BigInteger(level) * level);
 
+    /// <summary>
+    /// rate がそのまま1スロットの補正値になる装備の基点。
+    /// 1スロットの補正値 = progression_value × 1.2^rarity × rate であるため、
+    /// progression_value = 1・rarity = Common（1.2^0 = 1）とすればスケーリングが恒等になる。
+    /// </summary>
+    private static readonly EquipmentBonus UnitSlot =
+        EquipmentBonus.None with { ProgressionValue = 1, Rarity = Rarity.Common };
+
     private static Enemy NewEnemy(
         int level,
         StatShape? shape = null,
@@ -147,7 +155,7 @@ public class StatCalculationTests
         var player = PlayerAtLevel(1000);
         var baseline = player.PAtk;
 
-        player.SetEquipment([EquipmentBonus.None with { PAtkRate = Ratio.Full }]);
+        player.SetEquipment([UnitSlot with { PAtkRate = Ratio.Full }]);
         player.AddStatusModifier(new StatusModifier(TargetStatus.PAtk, Ratio.Full));
 
         Assert.Equal(baseline * 4, player.PAtk);
@@ -160,10 +168,96 @@ public class StatCalculationTests
         var baseline = player.PDef;
 
         // +20% を5スロット → ×2.0（×1.2^5 = ×2.49 ではない）
-        var slot = EquipmentBonus.None with { PDefRate = Ratio.FromPercent(20m) };
+        var slot = UnitSlot with { PDefRate = Ratio.FromPercent(20m) };
         player.SetEquipment([slot, slot, slot, slot, slot]);
 
         Assert.Equal(baseline * 2, player.PDef);
+    }
+
+    // --- 1スロットの補正値 = progression_value × 1.2^rarity × rate ---
+
+    [Theory]
+    // rarity = Common（1.2^0 = 1）: 補正値は rate そのまま
+    [InlineData(1, Rarity.Common, 10000, 10000)]
+    // progression_value がそのまま倍率として効く（Lv5000 で P(5000) = 60 の想定）
+    [InlineData(60, Rarity.Common, 10000, 600000)]
+    // rarity = Uncommon（1.2^1）: 10000 × 6 ÷ 5 = 12000
+    [InlineData(1, Rarity.Uncommon, 10000, 12000)]
+    // rarity = Rare（1.2^2 = 1.44）: 10000 × 36 ÷ 25 = 14400
+    [InlineData(1, Rarity.Rare, 10000, 14400)]
+    // rarity = Mythic（1.2^3 = 1.728）
+    [InlineData(1, Rarity.Mythic, 10000, 17280)]
+    // rarity = Hidden（1.2^4 = 2.0736）
+    [InlineData(1, Rarity.Hidden, 10000, 20736)]
+    // 負の補正値（デメリット装備）でも同じ式が通る
+    [InlineData(10, Rarity.Rare, -10000, -144000)]
+    public void 装備1スロットの補正値は進行度とレアリティでスケールされる(
+        int progressionValue, Rarity rarity, int ratePermyriad, int expected)
+    {
+        var actual = StatCalculator.EquipmentContribution(
+            progressionValue, rarity, Ratio.FromPermyriad(ratePermyriad));
+
+        Assert.Equal(new BigInteger(expected), actual);
+    }
+
+    [Fact]
+    public void レアリティ補正は浮動小数点を通さず有理数で累乗される()
+    {
+        // 1.2^4 = 2.0736 は double では正確に表現できない。6^4 ÷ 5^4 = 1296 ÷ 625 で厳密に計算する
+        var contribution = StatCalculator.EquipmentContribution(
+            BigInteger.Pow(10, 40), Rarity.Hidden, Ratio.Full);
+
+        Assert.Equal(BigInteger.Pow(10, 40) * 1296 * 10000 / 625, contribution);
+    }
+
+    [Fact]
+    public void 進行度が0の装備は補正値を供給しない()
+    {
+        // スロット未装着と等価。EquipmentBonus.None がこの形になっている
+        Assert.Equal(BigInteger.Zero,
+            StatCalculator.EquipmentContribution(BigInteger.Zero, Rarity.Hidden, Ratio.Full));
+    }
+
+    [Fact]
+    public void 進行度でスケールされた補正値が装備レイヤーに入る()
+    {
+        // progression_value = 1・rate = +100% で補正値 1.0 → 装備補正 ×2
+        var player = PlayerAtLevel(1000);
+        var baseline = player.PAtk;
+
+        player.SetEquipment([UnitSlot with { PAtkRate = Ratio.Full }]);
+        Assert.Equal(baseline * 2, player.PAtk);
+
+        // progression_value = 3 なら補正値 3.0 → 装備補正 ×4
+        player.SetEquipment([UnitSlot with { ProgressionValue = 3, PAtkRate = Ratio.Full }]);
+        Assert.Equal(baseline * 4, player.PAtk);
+    }
+
+    [Fact]
+    public void 装備の補正値はintに収まらない大きさになりうる()
+    {
+        // progression_value は DECIMAL(65,0) 相当。合計を Ratio（int）で持てないことの確認
+        var player = PlayerAtLevel(1);
+        var huge = BigInteger.Pow(10, 30);
+
+        player.SetEquipment([UnitSlot with { ProgressionValue = huge, PAtkRate = Ratio.Full }]);
+
+        Assert.True(player.PAtk > int.MaxValue);
+        Assert.Equal(GameConstants.AttackScale * (1 + huge), player.PAtk);
+    }
+
+    [Fact]
+    public void SpeedとLuckは進行度とレアリティのスケーリングを受けない()
+    {
+        // Speed と Luck は「上記の乗算構造の対象外」であり、装備の生の値をそのまま加算する
+        var player = PlayerAtLevel(100);
+
+        player.SetEquipment([
+            UnitSlot with { ProgressionValue = 999, Rarity = Rarity.Hidden, SpeedBonus = 50, LuckBonusRate = Ratio.FromPercent(5m) },
+        ]);
+
+        Assert.Equal(GameConstants.PlayerBaseSpeed + 50, player.Speed);
+        Assert.Equal(Ratio.FromPercent(5m), player.Luck);
     }
 
     [Fact]
@@ -226,8 +320,8 @@ public class StatCalculationTests
         Assert.Equal(300, enemy.Speed);
 
         enemy.SetEquipment([
-            EquipmentBonus.None with { SpeedBonus = 50 },
-            EquipmentBonus.None with { SpeedBonus = -30 },
+            UnitSlot with { SpeedBonus = 50 },
+            UnitSlot with { SpeedBonus = -30 },
         ]);
         Assert.Equal(320, enemy.Speed);
     }
@@ -250,8 +344,8 @@ public class StatCalculationTests
 
         // 乗算ではなく%ポイントの加算
         player.SetEquipment([
-            EquipmentBonus.None with { LuckBonusRate = Ratio.FromPercent(5m) },
-            EquipmentBonus.None with { LuckBonusRate = Ratio.FromPercent(3m) },
+            UnitSlot with { LuckBonusRate = Ratio.FromPercent(5m) },
+            UnitSlot with { LuckBonusRate = Ratio.FromPercent(3m) },
         ]);
         Assert.Equal(Ratio.FromPercent(8m), player.Luck);
     }
@@ -280,8 +374,8 @@ public class StatCalculationTests
         Assert.Equal(Element.Fire, enemy.Elements);
 
         enemy.SetEquipment([
-            EquipmentBonus.None with { Elements = Element.Water },
-            EquipmentBonus.None with { Elements = Element.Ice },
+            UnitSlot with { Elements = Element.Water },
+            UnitSlot with { Elements = Element.Ice },
         ]);
         Assert.Equal(Element.Fire | Element.Water | Element.Ice, enemy.Elements);
 
@@ -296,7 +390,7 @@ public class StatCalculationTests
     public void プレイヤーの属性は装備由来のみである()
     {
         var player = PlayerAtLevel(100);
-        player.SetEquipment([EquipmentBonus.None with { Elements = Element.Light }]);
+        player.SetEquipment([UnitSlot with { Elements = Element.Light }]);
 
         Assert.Equal(Element.Light, player.Elements);
     }

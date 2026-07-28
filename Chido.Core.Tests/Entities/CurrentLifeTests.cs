@@ -14,6 +14,13 @@ namespace Chido.Core.Tests.Entities;
 /// </summary>
 public class CurrentLifeTests
 {
+    /// <summary>
+    /// rate がそのまま1スロットの補正値になる装備の基点
+    /// （progression_value = 1・rarity = Common により 1.2^0 = 1 でスケーリングが恒等になる）。
+    /// </summary>
+    private static readonly EquipmentBonus UnitSlot =
+        EquipmentBonus.None with { ProgressionValue = 1, Rarity = Rarity.Common };
+
     private static Player PlayerAtLevel(int level)
     {
         var player = new Player(userId: 1, name: "テスト", exp: new BigInteger(level) * level);
@@ -117,7 +124,7 @@ public class CurrentLifeTests
         var player = PlayerAtLevel(100);
         var fullLife = player.CurrentLife;
 
-        player.SetEquipment([EquipmentBonus.None with { MaxLifeRate = Ratio.FromPercent(-50m) }]);
+        player.SetEquipment([UnitSlot with { MaxLifeRate = Ratio.FromPercent(-50m) }]);
 
         Assert.Equal(fullLife, player.CurrentLife);
         Assert.True(player.CurrentLife > player.MaxLife);
@@ -128,7 +135,7 @@ public class CurrentLifeTests
     {
         var player = PlayerAtLevel(100);
         var fullLife = player.CurrentLife;
-        var equipment = new[] { EquipmentBonus.None with { MaxLifeRate = Ratio.FromPercent(-50m) } };
+        var equipment = new[] { UnitSlot with { MaxLifeRate = Ratio.FromPercent(-50m) } };
 
         player.SetEquipment(equipment);
         player.SetEquipment([]);
