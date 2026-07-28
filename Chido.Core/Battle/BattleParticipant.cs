@@ -10,7 +10,18 @@ public class BattleParticipant
     public ulong?         DiscordUserId { get; } // プレイヤーのみ設定 (DB: user_id)
     public Guid?          EnemyId       { get; } // 敵のみ設定。敵出現インスタンスの使い捨てGuid (DB: enemy_id)
 
-    // ターン制御には使わず、Discord埋め込みでの参加者表示順にのみ使う
+    /// <summary>
+    /// 表示順。entity_type ごとに独立した番号空間を持つ。
+    /// Enemy : 組の member_index の恒等複製。ターゲット自動再選定における「先頭の敵」の唯一の根拠。
+    /// Player: セッション内の参加順。Discord埋め込みの表示順にのみ使用される。
+    ///
+    /// 時刻列（JoinedAt）を順序キーに流用しないための専用の列。DATETIME(3) は
+    /// 「同時に走らない」ことが保証されていても「別ミリ秒になること」は保証しないため、
+    /// 一括INSERTされる敵の組では順序が一意に定まらない。
+    /// </summary>
+    public ushort DisplayOrder { get; }
+
+    /// <summary>参加時刻の記録。順序付けには使用しない（DisplayOrder がその責務を持つ）。</summary>
     public DateTimeOffset JoinedAt { get; }
 
     public bool IsPlayer => EntityType == EntityType.Player;
@@ -27,12 +38,14 @@ public class BattleParticipant
         EntityType      entityType,
         ulong?          discordUserId = null,
         Guid?           enemyId       = null,
+        ushort          displayOrder  = 0,
         DateTimeOffset? joinedAt      = null)
     {
         Entity        = entity;
         EntityType    = entityType;
         DiscordUserId = discordUserId;
         EnemyId       = enemyId;
+        DisplayOrder  = displayOrder;
         JoinedAt      = joinedAt ?? DateTimeOffset.UtcNow;
     }
 

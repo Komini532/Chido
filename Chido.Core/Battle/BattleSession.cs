@@ -44,17 +44,43 @@ public class BattleSession
     // --- ターゲット解決 ---
 
     /// <summary>
-    /// actor の CurrentTarget を解決する。対象が戦闘不能等で Active でなくなっていた場合は自動失効させ、
-    /// Participants リスト内で Active を保つ先頭の敵 (行動側と異なる EntityType) を次点として自動選定する。
+    /// actor の CurrentTarget を解決する（戦闘システム 3.3）。
+    ///
+    /// 初回既定・自動失効後の再選定を区別しない<b>単一の導出関数</b>である。
+    /// 「初回だから」「対象が死んだから」という契機による分岐を持たず、
+    /// 格納値が使えなければ常に後段（Active な display_order 最小の敵）へ落ちる。
+    ///
+    /// 後段に落ちた場合、その結果を CurrentTargetId へ<b>書き戻す</b>。
+    /// 書き戻すことで、明示指定した敵が戦闘不能になった後（将来の蘇生機能で）復活しても
+    /// ターゲットが巻き戻らない。
+    ///
+    /// 「先頭」の順序の唯一の根拠は DisplayOrder であり、参加時刻は使用しない。
+    /// 選定結果が常に一意になり、かつプレイヤーから見て「一番上に表示されている敵」＝
+    /// 「次にターゲットされる敵」という直感と一致する。
     /// </summary>
-    public BattleParticipant? ResolveTarget(BattleParticipant actor)
+    /// <exception cref="InvalidOperationException">
+    /// Active な敵が1体も存在しない場合。セッション終了トリガー（敵側の生存が0で
+    /// PlayerVictory／EnemyEscaped）により構造的に起こらないため、到達したらフォールバックせず
+    /// 実装の不具合として投げる。無言で行動を握り潰すと、セッション終了処理の漏れが検出できなくなる。
+    /// </exception>
+    public BattleParticipant ResolveTarget(BattleParticipant actor)
     {
-        var current = _participants.FirstOrDefault(p => p.Entity.Id == actor.CurrentTargetId);
-        if (current is { IsActive: true })
-            return current;
+        var stored = _participants.FirstOrDefault(p => p.Entity.Id == actor.CurrentTargetId);
+        if (stored is { IsActive: true }) return stored;
 
-        var next = _participants.FirstOrDefault(p => p.EntityType != actor.EntityType && p.IsActive);
-        actor.SetTarget(next?.Entity.Id);
+        var next = _participants
+            .Where(p => p.EntityType != actor.EntityType && p.IsActive)
+            .OrderBy(p => p.DisplayOrder)
+            .FirstOrDefault();
+
+        if (next is null)
+        {
+            throw new InvalidOperationException(
+                $"{actor.Entity.Name} の対象を解決できない。相対する側に Active な参加者が存在せず、" +
+                "本来はセッション終了トリガーが先に発火しているはずである。");
+        }
+
+        actor.SetTarget(next.Entity.Id);
         return next;
     }
 
