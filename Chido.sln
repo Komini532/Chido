@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chido.Data", "Chido.Data\Ch
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chido.Core.Tests", "Chido.Core.Tests\Chido.Core.Tests.csproj", "{5C89E9C9-4AF6-4B5F-99AA-0121D43CDCBE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chido.Data.Tests", "Chido.Data.Tests\Chido.Data.Tests.csproj", "{BEF31880-DE2F-4767-8FDF-26EC34808F5E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{5C89E9C9-4AF6-4B5F-99AA-0121D43CDCBE}.Release|x64.Build.0 = Release|Any CPU
 		{5C89E9C9-4AF6-4B5F-99AA-0121D43CDCBE}.Release|x86.ActiveCfg = Release|Any CPU
 		{5C89E9C9-4AF6-4B5F-99AA-0121D43CDCBE}.Release|x86.Build.0 = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|x64.Build.0 = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Debug|x86.Build.0 = Debug|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|x64.ActiveCfg = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|x64.Build.0 = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|x86.ActiveCfg = Release|Any CPU
+		{BEF31880-DE2F-4767-8FDF-26EC34808F5E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

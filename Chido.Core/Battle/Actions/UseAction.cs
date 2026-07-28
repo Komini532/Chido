@@ -20,7 +20,7 @@ public sealed class UseAction : BattleActionBase
         _effectTarget = effectTarget;
     }
 
-    public override ActionType Type => ActionType.Item;
+    public override ActionType Type => ActionType.Use;
 
     protected override Task<BattleActionResult> ExecuteCoreAsync(
         BattleParticipant                actor,

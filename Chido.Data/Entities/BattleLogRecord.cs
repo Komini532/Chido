@@ -17,7 +17,7 @@ public class BattleLogRecord
     /// <summary>行動主体のentity_id（chido_battle_participant.entity_id）。</summary>
     public Guid ActorId { get; set; }
 
-    /// <summary>ActionType（Attack/Skill/Item/Defend/Escape）。</summary>
+    /// <summary>ActionType（Attack/Skill/Use/Defend/Escape）。</summary>
     public ActionType ActionType { get; set; }
 
     /// <summary>対象のentity_id（対象がいない行動ではNULL）。</summary>
