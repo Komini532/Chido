@@ -8,7 +8,7 @@ public interface IDamageModifier
 
     /// <summary>
     /// 現フェーズの累積ダメージを受け取り、補正後の値を返す。
-    /// context は読み取り専用 (ターゲット情報は DamageCalculator 側が持つ)。
+    /// context は読み取り専用（対象の情報はパイプライン側が持つ）。
     /// </summary>
     BigInteger Apply(BigInteger current, DamageContext context);
 

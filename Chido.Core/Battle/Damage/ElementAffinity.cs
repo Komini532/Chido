@@ -128,21 +128,4 @@ public static class ElementAffinity
     /// <summary>攻撃力に属性補正を適用する（スコア算出込みの短縮形）。</summary>
     public static BigInteger ApplyToAttack(BigInteger attack, Element attackerElements, Element defenderElements)
         => ApplyToAttack(attack, GetScore(attackerElements, defenderElements));
-
-    /// <summary>
-    /// 属性補正倍率を Ratio として返す互換シム。
-    ///
-    /// permyriad（10000 = 100%）へ丸める過程で <see cref="ApplyToAttack"/> とは異なる誤差が乗るため、
-    /// ダメージ計算の正となるのは <see cref="ApplyToAttack"/> のほう。
-    /// 本メソッドはダメージパイプラインが Ratio 経由の Modifier で属性補正を適用している
-    /// 現行実装のために残しており、パイプラインを BigInteger 経路へ切り替える際に削除する。
-    /// </summary>
-    public static Ratio GetMultiplier(Element attackerElements, Element defenderElements)
-    {
-        var score = GetScore(attackerElements, defenderElements);
-        if (score == 0) return Ratio.Full;
-
-        // 10000 を基準値として同じ有理数演算を通すことで、丸めの向きを ApplyToAttack と揃える
-        return Ratio.FromPermyriad((int)ApplyToAttack(new BigInteger(10000), score));
-    }
 }

@@ -144,6 +144,14 @@ public static class GameConstants
     public const int MinimumDamage = 1;
 
     /// <summary>
+    /// 威力（power）の格納スケール。100 = 等倍（通常攻撃 = 100）。
+    /// permyriad ではなく整数%であり、Ratio への変換対象外
+    /// （計算に使われる値であると同時にプレイヤーへ提示される表示情報でもあるため、
+    /// 意図的に小数精度を持たせない）。
+    /// </summary>
+    public const int PowerScale = 100;
+
+    /// <summary>
     /// 属性補正 1.3^x を有理数で表すための分子。倍率は x ≥ 0 で × 13^x ÷ 10^x、
     /// x &lt; 0 で × 10^|x| ÷ 13^|x| として適用し、浮動小数点を通さない（5.1 の丸め規則）。
     /// </summary>

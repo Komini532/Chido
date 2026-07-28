@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Chido.Core.Battle.Damage;
-using Chido.Core.Stats;
 
 namespace Chido.Core.Battle.Actions;
 
@@ -16,13 +15,15 @@ public sealed class SkillAction : BattleActionBase
 {
     private readonly string     _skillName;
     private readonly AttackType _attackType;
-    private readonly Ratio      _power;
+    private readonly int        _power;
+    private readonly Element    _motionElements;
 
-    public SkillAction(string skillName, AttackType attackType, Ratio power)
+    public SkillAction(string skillName, AttackType attackType, int power, Element motionElements = Element.None)
     {
-        _skillName  = skillName;
-        _attackType = attackType;
-        _power      = power;
+        _skillName      = skillName;
+        _attackType     = attackType;
+        _power          = power;
+        _motionElements = motionElements;
     }
 
     public override ActionType Type => ActionType.Skill;
@@ -43,7 +44,7 @@ public sealed class SkillAction : BattleActionBase
         session.RecordAction();
 
         var logs = ExchangeRunner.Run(
-            actor,  (a, d, r) => AttackResolver.Resolve(a, d, _attackType, r, skillPower: _power, skillName: _skillName),
+            actor,  (a, d, r) => AttackResolver.Resolve(a, d, _attackType, r, power: _power, motionElements: _motionElements, skillName: _skillName),
             target, (a, d, r) => AttackResolver.Resolve(a, d, AttackType.Physical, r),
             rng);
 
