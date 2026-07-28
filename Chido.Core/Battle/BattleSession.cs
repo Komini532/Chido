@@ -29,11 +29,21 @@ public class BattleSession
         ChannelId = channelId;
     }
 
+    // 離脱・戦闘不能の発生順の採番。セッション単位で閉じているため、
+    // 他のセッションの進行に影響されない
+    private ushort _deactivationOrder;
+
     // 飛び入り参加が前提のため、進行中セッションへの途中参加も常に許可する
     public void AddParticipant(BattleParticipant participant)
     {
+        participant.Session = this;
         _participants.Add(participant);
     }
+
+    /// <summary>
+    /// 次の消失順の採番。<see cref="BattleParticipant"/> が Active でなくなるときに1度だけ呼ぶ。
+    /// </summary>
+    internal ushort NextDeactivationOrder() => ++_deactivationOrder;
 
     // プレイヤーの戦闘行為（攻撃/スキル/戦闘用アイテム）が発生するたびに呼び出す
     public void RecordAction()
@@ -108,16 +118,25 @@ public class BattleSession
     // ここでいう「0人になる」はリストの行数が0になることではなく、該当する側の全参加者の状態が
     // 揃うことを指す（参加者行は物理削除されない）。
     //
-    // [Phase 5c で対応] EnemyEscaped（敵側の生存が0で、最後の1体の消失原因が Escaped）は
-    // 状態分布だけでは PlayerVictory と区別できず、「最後の1体がどちらで消えたか」の追跡を要する。
-    // トリガーが発火した時点で終了理由を記録する仕組みと併せてセッション終了処理に実装する。
+    // 3系統は並列に判定する。ChannelMissing だけはこの関数の外から与えられる終了理由であり
+    // （戦闘の場そのものが消えたという、参加者の状態には現れない事象のため）、
+    // Discord イベントの能動検知とバックグラウンド検証の二層で拾って Finish に直接渡す。
     public (bool ended, BattleEndReason reason) CheckEndCondition()
     {
         var enemies = _participants.Where(p => !p.IsPlayer).ToList();
         var players = _participants.Where(p => p.IsPlayer).ToList();
 
-        bool allEnemiesDefeated = enemies.Count > 0 && enemies.All(p => p.Status == ParticipantStatus.Defeated);
-        if (allEnemiesDefeated) return (true, BattleEndReason.PlayerVictory);
+        // 敵側の生存が0。撃破と逃走の区別は状態分布からは付かないため、最後に消えた1体を見る。
+        // 「敵2体のうち1体が逃走しもう1体が撃破された」場合と「1体が逃走した後にプレイヤーが
+        // 全員逃走した」場合とでは、テーブル上に同じ状態の組み合わせが現れうる
+        if (enemies.Count > 0 && enemies.All(p => !p.IsActive))
+        {
+            var last = enemies.OrderByDescending(p => p.DeactivationOrder ?? 0).First();
+
+            return (true, last.Status == ParticipantStatus.Escaped
+                ? BattleEndReason.EnemyEscaped
+                : BattleEndReason.PlayerVictory);
+        }
 
         // 能動的な選択である Escape のみがトリガー。Defeated が混ざっている間は終了しない
         bool allPlayersEscaped = players.Count > 0 && players.All(p => p.Status == ParticipantStatus.Escaped);

@@ -74,6 +74,12 @@ public static class SlipDamageRunner
             var effectiveDamage = holder.Entity.TakeDamage(result.FinalDamage);
 
             logs.Add($"{holder.Entity.Name} は {instance.Definition.Name} で {effectiveDamage} のダメージを受けた。");
+
+            // 被攻撃TPはインスタンス単位で蓄積する。併存する微小なスリップが各回0に落ちて
+            // 蓄積されないことは、実用上の許容誤差として意図的（戦闘システム 4.4）。
+            // auto 付与の自滅スリップでは付与者と被弾側が同一になり、自分の自滅ダメージで
+            // 自分のTPが蓄積されるが、これも意図した挙動
+            holder.GainTpOnDamaged(effectiveDamage);
             onDamageDealt?.Invoke(instance.GranterEntityId, holder, effectiveDamage);
 
             if (holder.Entity.IsAlive || !holder.IsActive) continue;

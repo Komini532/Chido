@@ -125,10 +125,17 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
 
         if (disabled is not null)
         {
+            // require_tp は消費しない。スキル発動そのものが起きていないため、
+            // TPを取ると行動を奪われたうえに資源も失うという二重罰になる（A-7-g）
             logs.Add($"{side.Participant.Entity.Name} は {disabled.Definition.Name} で動けない！");
         }
         else
         {
+            // 発動時にTPを消費する。敵の抽選プールは払えるスキルだけで構成され、
+            // プレイヤー側はコマンド受理時に弾かれるため、ここで払えないことは通常起こらない。
+            // ターン開始からこの時点までにTPが減る経路が無い（被弾は増やす方向にしか働かない）
+            side.Participant.TrySpendTp(side.Skill.RequireTp);
+
             var result = skillPlayer.Play(
                 side.Participant, side.Skill, sideEnemy, rng,
                 // [対象] は行動したプレイヤーのコマンド引数であり、反撃側には引き継がれない

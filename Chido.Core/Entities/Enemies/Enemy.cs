@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Chido.Core.Battle.Damage;
 using Chido.Core.Stats;
@@ -48,6 +49,14 @@ public sealed class Enemy : EntityBase
     /// <summary>味方対象モーションの対象選択規則。<see cref="ActionPatternType"/> と対をなす。</summary>
     public AllyTargetRule AllyTargetRule { get; }
 
+    /// <summary>
+    /// 保有スキル（chido_enemy_skills_master の登録行）。登録順がローテーションの順序になる。
+    ///
+    /// 件数は<b>戦闘中は不変</b>であり（いかなる要因でも敵の登録スキル数は変動しない）、
+    /// ローテーションの法 <c>total</c> はこの件数を指す。1件も持たない場合は通常攻撃へフォールバックする。
+    /// </summary>
+    public IReadOnlyList<EnemySkillEntry> Skills { get; }
+
     public Enemy(
         string masterKey,
         string name,
@@ -60,8 +69,11 @@ public sealed class Enemy : EntityBase
         ushort initialTp = 0,
         ActionPatternType actionPatternType = ActionPatternType.PureRandom,
         AllyTargetRule allyTargetRule = AllyTargetRule.PureRandom,
+        IEnumerable<EnemySkillEntry>? skills = null,
         Guid? entityId = null)
     {
+        Skills = skills is null ? [] : [.. skills];
+
         MasterKey = masterKey;
         Name = name;
         Level = level;

@@ -12,13 +12,22 @@ public abstract class BattleActionBase : IBattleAction
 {
     public abstract ActionType Type { get; }
 
+    /// <summary>
+    /// 行動者が Active であることを要求するか。
+    ///
+    /// Escape だけは偽になる。<c>/escape</c> は Active・Defeated のいずれからも実行でき、
+    /// 戦闘不能プレイヤーが単一セッション制約の拘束を自力で解く唯一の手段であるため
+    /// （戦闘システム 4.3）。ここで一律に弾くと、その脱出経路が塞がる。
+    /// </summary>
+    protected virtual bool RequiresActiveActor => true;
+
     public Task<BattleActionResult> ExecuteAsync(
         BattleParticipant                actor,
         IReadOnlyList<BattleParticipant>  participants,
         BattleSession                     session,
         Random                            rng)
     {
-        if (!actor.IsActive)
+        if (RequiresActiveActor && !actor.IsActive)
         {
             return Task.FromResult(new BattleActionResult(
                 false, null,
