@@ -4,23 +4,16 @@ namespace Chido.Core.Battle;
 // 既存行の意味が変わらないよう、今後の変更は末尾への追加のみとし、
 // 既存メンバーの並び替え・削除は行わないこと。
 //
-// 終了理由はトリガー発火時点で明示的に記録する。参加者の状態分布からは
-// PlayerEscaped と EnemyEscaped（および PlayerVictory）を事後的に区別できないため
-// （例: 敵2体のうち1体が逃走し、もう1体が撃破された場合、テーブル上には
-// Escaped の敵行と Escaped のプレイヤー行が同居しうる）。
-// この値は次に出現する敵の抽選ロジックを分岐させる（戦闘システム 10.3参照）。
-//
-// PlayerDefeat が存在しないのは意図的である。非同期・飛び入り参加前提の戦闘は参加者の総数が
-// 確定しないため、戦闘不能を終了トリガーに含めると「最初の1人が参加してそのまま戦闘不能に
-// なっただけでセッションが終了する」という、前提と矛盾する挙動が起こりうる（戦闘システム 6.1参照）。
-//
-// Timeout も存在しない。非同期設計では長時間放置されること自体は許容しており（誰かが後から
-// 行動すればよい）、問題になるのは「時間が経ったこと」ではなく「戦闘の場が消えて続行不可能に
-// なったこと」であるため、時間経過ではなくチャンネルの存否を終了条件にしている（同 6.1参照）。
+// [要確認] chido-database-design.md の end_reason コメントには
+// 「PlayerVictory/PlayerDefeat/Escaped/Timeout」とあるが、実コードは Timeout ではなく
+// ChannelMissing になっている。last_action_at は「放置タイムアウト判定に使用」と
+// 設計書に明記されている一方、現状 Timeout に対応する BattleEndReason が存在しないため、
+// 放置タイムアウトによる終了は現状表現できない。
+// 対応する場合は既存メンバーを書き換えず、末尾に Timeout = 4 を追加すること。
 public enum BattleEndReason
 {
-    PlayerVictory  = 0, // 敵側の生存参加者が Defeated により 0 になった
-    PlayerEscaped  = 1, // プレイヤー側の生存参加者が Escaped により 0 になった
-    EnemyEscaped   = 2, // 敵側の生存参加者が Escaped により 0 になった
-    ChannelMissing = 3, // チャンネル消失により戦闘の継続が不可能になった
+    PlayerVictory  = 0,
+    PlayerDefeat   = 1,
+    Escaped        = 2,
+    ChannelMissing = 3, // チャンネル消失により戦闘の継続が不可能になった場合
 }
