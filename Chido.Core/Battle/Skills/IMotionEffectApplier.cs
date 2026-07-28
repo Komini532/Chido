@@ -16,7 +16,12 @@ public interface IMotionEffectApplier
     /// 状態変化を付与する。重複時は拒否（既存インスタンスの残り有効行動数を延長しない）。
     /// 戻り値は表示用のメッセージ。null なら通知しない。
     /// </summary>
-    string? Grant(BattleParticipant granter, BattleParticipant target, GrantEffectMotion motion);
+    /// <param name="skillKey">
+    /// 付与元のスキル。重複判定キーの grant_source_key になる。
+    /// affect_reason は本値が「何のキーであるか」を示す型タグであり、本値からは導出できない。
+    /// </param>
+    string? Grant(
+        BattleParticipant granter, BattleParticipant target, GrantEffectMotion motion, string skillKey);
 
     /// <summary>
     /// 対象が保持する全スコープから effect_key が一致する状態変化をすべて削除する。

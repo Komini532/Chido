@@ -24,11 +24,9 @@ public abstract class EntityBase : IEntity
     // 装着中の装備。5スロットぶんが加算合成されて1つの乗算項になる（レイヤー内は加算）
     private readonly List<EquipmentBonus> _equipment = [];
 
-    // 併存する状態変化インスタンスのステータス変動成分。同じく加算合成される
-    private readonly List<StatusModifier> _statusModifiers = [];
-
-    // 一時付与属性。本体属性・装備属性と OR される。保持数の上限は設けない（戦闘システム 5.3）
-    private Element _grantedElements = Element.None;
+    // 保持中の状態変化インスタンス。ステータス変動・一時付与属性・DRR はすべてここから導出される
+    // （二重管理を避けるため、これらを別のリストとしては持たない）
+    private readonly List<EffectInstance> _effects = [];
 
     public Guid Id { get; protected set; } = Guid.NewGuid();
 
@@ -76,7 +74,9 @@ public abstract class EntityBase : IEntity
         _equipment.Aggregate(Ratio.Zero, (acc, e) => acc + e.LuckBonusRate));
 
     public Element Elements =>
-        InnateElements | _equipment.Aggregate(Element.None, (acc, e) => acc | e.Elements) | _grantedElements;
+        InnateElements
+        | _equipment.Aggregate(Element.None, (acc, e) => acc | e.Elements)
+        | _effects.Aggregate(Element.None, (acc, e) => acc | e.Definition.GrantedElements);
 
     public Ratio DamageResistRate => ToRatio(StatusSum(TargetStatus.DamageResistRate));
 
@@ -161,22 +161,20 @@ public abstract class EntityBase : IEntity
     }
 
     // --- 状態変化レイヤー ---
-    // 付与・解除のライフサイクル（重複判定・残り有効行動数の減衰）は状態変化の実装時に
-    // このリストを駆動する形で載る。ここが持つのは合成に必要な変動量のみ。
+    // 付与の重複判定・減衰・解除は EffectApplier / EffectDecay が担い、ここは保持と集計に徹する。
 
-    public IReadOnlyList<StatusModifier> StatusModifiers => _statusModifiers;
+    /// <summary>保持中の状態変化インスタンス。付与順に並ぶ。</summary>
+    public IReadOnlyList<EffectInstance> Effects => _effects;
 
-    public void AddStatusModifier(StatusModifier modifier) => _statusModifiers.Add(modifier);
+    public void AddEffect(EffectInstance effect) => _effects.Add(effect);
 
-    public bool RemoveStatusModifier(StatusModifier modifier) => _statusModifiers.Remove(modifier);
+    public bool RemoveEffect(EffectInstance effect) => _effects.Remove(effect);
 
-    public void ClearStatusModifiers() => _statusModifiers.Clear();
-
-    // --- 一時付与属性 ---
-
-    public void GrantElements(Element elements) => _grantedElements |= elements;
-
-    public void ClearGrantedElements() => _grantedElements = Element.None;
+    /// <summary>
+    /// 戦闘終了時の除去。戦闘内スコープのインスタンスのみを落とす。
+    /// 永続スコープは戦闘の境界を何も参照せず、残り有効行動数だけが終わりを保証する。
+    /// </summary>
+    public void ClearBattleScopedEffects() => _effects.RemoveAll(e => e.Scope == EffectScope.Battle);
 
     // --- 内部 ---
 
@@ -190,9 +188,13 @@ public abstract class EntityBase : IEntity
     private BigInteger EquipmentSum(Func<EquipmentBonus, Ratio> selector)
         => _equipment.Aggregate(BigInteger.Zero, (acc, e) => acc + e.ContributionOf(selector(e)));
 
-    /// <summary>状態変化レイヤーの Σ（permyriad）。装備側と型を揃えるため BigInteger で合算する。</summary>
+    /// <summary>
+    /// 状態変化レイヤーの Σ（permyriad）。装備側と型を揃えるため BigInteger で合算する。
+    /// 併存する複数インスタンスはレイヤー内加算で1つの項にまとまる。
+    /// </summary>
     private BigInteger StatusSum(TargetStatus targetStatus)
-        => _statusModifiers
+        => _effects
+            .SelectMany(e => e.StatusModifiers)
             .Where(m => m.TargetStatus == targetStatus)
             .Aggregate(BigInteger.Zero, (acc, m) => acc + m.Rate.Permyriad);
 

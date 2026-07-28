@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Chido.Core.Battle.Effects;
 using Chido.Core.Battle.Skills;
 using Chido.Core.Entities;
 
 namespace Chido.Core.Battle;
 
 /// <summary>
-/// 1ターンの骨格（戦闘システム 4.1・4.2）。
+/// 1ターンの骨格（戦闘システム 4.1・4.2・5.4）。
 ///
 /// プレイヤーと敵は互いに「1スキルに対し1スキル」で応酬する。処理順は
 /// 「行動側スキルの全モーション再生 → 相手側スキルの全モーション再生」という直列であり、
@@ -16,6 +17,19 @@ namespace Chido.Core.Battle;
 ///
 /// <b>先攻側の一撃で後攻側が戦闘不能になった場合、後攻側の行動はキャンセルされる</b>
 /// （＝ダメージ計算自体が行われない）。高 Priority の攻撃スキルはこれを能動的に狙う手段になる。
+///
+/// 状態変化を含めた1ターンの処理順は次の通り（戦闘システム 5.4「行動不能ターンの処理順」）。
+/// <code>
+/// 1. 両者のスキル確定（敵は action_pattern_type で抽選、require_tp フォールバック含む）
+/// 2. Priority → Speed → Random で行動順決定
+/// 3. 先攻: DisableMove 判定 → 成立ならモーション再生をスキップ / 不成立なら再生
+/// 4. 先攻の SlipDamage 発動
+/// 5. 後攻: 同様（先攻の一撃で戦闘不能なら 4.1 によりキャンセル）
+/// 6. 後攻の SlipDamage 発動
+/// 7. 関与者集合（2体）の remaining_actions を -1 し、0 の行を削除（同一トランザクション）
+/// </code>
+/// ステップ3が2より後にあるのは、行動不能を先に判定するとスキルが確定せず
+/// <c>priority</c> が読めなくなり、ステップ2そのものが成立しなくなるため（A-7-i）。
 /// </summary>
 public sealed class TurnResolver(SkillPlayer skillPlayer)
 {
@@ -30,6 +44,11 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
     /// 反撃者が使うスキルを決める。敵の行動パターン（action_pattern_type）と require_tp の
     /// フォールバックがここに載る。
     /// </param>
+    /// <param name="onDamageDealt">
+    /// 実効ダメージの通知。第1引数は<b>与ダメージの帰属先の entity_id</b>。
+    /// ライブ攻撃では行動者、<c>SlipDamage</c> では<b>付与者</b>であり被弾させた側とは限らない
+    /// （戦闘システム 6.2）。第2引数は被弾側で、被攻撃TPの蓄積先になる。
+    /// </param>
     public TurnResult Resolve(
         BattleParticipant actor,
         Skill actorSkill,
@@ -38,7 +57,7 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
         Func<BattleParticipant, Skill> counterSkillSelector,
         BattleParticipant? commandTarget = null,
         EnemyAllyTargetSelector? enemyAllySelector = null,
-        Action<BattleParticipant, BattleParticipant, BigInteger>? onDamageDealt = null)
+        Action<Guid, BattleParticipant, BigInteger>? onDamageDealt = null)
     {
         var logs = new List<string>();
 
@@ -51,9 +70,12 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
         // 対象解決（と後段へ落ちた場合の書き戻し）はターンにつきここ1回だけ行い、
         // モーションごとには再導出しない。再導出すると、対象を倒した後の残モーションが
         // 別の敵へ乗り換わってしまい「そのモーションのみスキップ」という規則が成立しなくなる
+        //
+        // ここで関与者集合（A-8）が閉じる。以後、集合の内訳はターン中の出来事で変化しない
         var counter = session.ResolveTarget(actor);
         var counterSkill = counterSkillSelector(counter);
 
+        // ステップ1・2
         var (first, second) = TurnOrder.Decide(
             new TurnSide(actor, actorSkill), new TurnSide(counter, counterSkill), rng);
 
@@ -61,26 +83,67 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
         var firstEnemy = second.Participant;
         var secondEnemy = first.Participant;
 
-        var firstResult = skillPlayer.Play(
-            first.Participant, first.Skill, firstEnemy, rng,
-            // [対象] は行動したプレイヤーのコマンド引数であり、反撃側には引き継がれない
-            commandTarget: first.Participant == actor ? commandTarget : null,
-            enemyAllySelector, onDamageDealt);
-        logs.AddRange(firstResult.Logs);
+        // ステップ3・4
+        var firstDisabled = RunActionSlot(
+            first, firstEnemy, actor, rng, commandTarget, enemyAllySelector, onDamageDealt, logs);
 
-        // 先攻の一撃で後攻が戦闘不能・離脱していれば後攻の行動はキャンセルされる
-        if (!second.Participant.IsActive)
+        // ステップ5。先攻の一撃で後攻が戦闘不能・離脱していれば後攻の行動はキャンセルされる。
+        // 行動枠そのものが開かないため後攻の SlipDamage も発動しないが、
+        // 関与者集合は変わらないため減衰（ステップ7）は通常通り行われる
+        var secondCancelled = !second.Participant.IsActive;
+
+        var secondDisabled = secondCancelled
+            ? null
+            // ステップ5・6
+            : RunActionSlot(
+                second, secondEnemy, actor, rng, commandTarget, enemyAllySelector, onDamageDealt, logs);
+
+        // ステップ7
+        var expired = EffectDecay.Apply(actor, counter);
+
+        return new TurnResult(logs, first, second, secondCancelled, firstDisabled, secondDisabled, expired);
+    }
+
+    /// <summary>
+    /// 1エンティティぶんの行動枠。行動不能の判定 → モーション再生 → SlipDamage の発動、までを閉じる。
+    ///
+    /// 行動不能が成立してもこの枠自体は開くため、<c>SlipDamage</c> は発動する（A-7-j）。
+    /// 発動しないと、行動不能と毒を併せ持つ相手に対して毒が実質無効化されてしまう。
+    /// </summary>
+    /// <returns>行動不能を成立させたインスタンス。成立しなければ null。</returns>
+    private EffectInstance? RunActionSlot(
+        TurnSide side,
+        BattleParticipant sideEnemy,
+        BattleParticipant actor,
+        Random rng,
+        BattleParticipant? commandTarget,
+        EnemyAllyTargetSelector? enemyAllySelector,
+        Action<Guid, BattleParticipant, BigInteger>? onDamageDealt,
+        List<string> logs)
+    {
+        var disabled = DisableMoveJudge.Judge(side.Participant, rng);
+
+        if (disabled is not null)
         {
-            return new TurnResult(logs, first, second, SecondCancelled: true);
+            logs.Add($"{side.Participant.Entity.Name} は {disabled.Definition.Name} で動けない！");
+        }
+        else
+        {
+            var result = skillPlayer.Play(
+                side.Participant, side.Skill, sideEnemy, rng,
+                // [対象] は行動したプレイヤーのコマンド引数であり、反撃側には引き継がれない
+                commandTarget: side.Participant == actor ? commandTarget : null,
+                enemyAllySelector,
+                onDamageDealt is null
+                    ? null
+                    : (attacker, target, damage) => onDamageDealt(attacker.Entity.Id, target, damage));
+
+            logs.AddRange(result.Logs);
         }
 
-        var secondResult = skillPlayer.Play(
-            second.Participant, second.Skill, secondEnemy, rng,
-            commandTarget: second.Participant == actor ? commandTarget : null,
-            enemyAllySelector, onDamageDealt);
-        logs.AddRange(secondResult.Logs);
+        logs.AddRange(SlipDamageRunner.Run(side.Participant, onDamageDealt));
 
-        return new TurnResult(logs, first, second, SecondCancelled: false);
+        return disabled;
     }
 
     /// <summary>
@@ -146,8 +209,17 @@ public sealed class TurnResolver(SkillPlayer skillPlayer)
 /// <param name="First">先攻側。</param>
 /// <param name="Second">後攻側。</param>
 /// <param name="SecondCancelled">先攻の一撃で後攻が Active でなくなり、後攻の行動がキャンセルされたか。</param>
+/// <param name="FirstDisabled">
+/// 先攻の行動不能を成立させたインスタンス。成立しなければ null。
+/// 成立してもターン消費・反撃・減衰は行われるため、ターンの成否とは無関係。
+/// </param>
+/// <param name="SecondDisabled">後攻の行動不能を成立させたインスタンス。</param>
+/// <param name="ExpiredEffects">残り有効行動数を使い切って取り除かれたインスタンス。</param>
 public sealed record TurnResult(
     IReadOnlyList<string> Logs,
     TurnSide First,
     TurnSide Second,
-    bool SecondCancelled);
+    bool SecondCancelled,
+    EffectInstance? FirstDisabled = null,
+    EffectInstance? SecondDisabled = null,
+    IReadOnlyList<(BattleParticipant Holder, EffectInstance Effect)>? ExpiredEffects = null);

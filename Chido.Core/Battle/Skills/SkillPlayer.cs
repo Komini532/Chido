@@ -114,12 +114,13 @@ public sealed class SkillPlayer(IMotionEffectApplier? effectApplier = null)
         }
 
         // ステップ5: 効果適用
-        Apply(actor, motion, target, rng, onDamageDealt, logs);
+        Apply(actor, skill, motion, target, rng, onDamageDealt, logs);
         return MotionOutcome.Applied;
     }
 
     private void Apply(
         BattleParticipant actor,
+        Skill skill,
         SkillMotion motion,
         BattleParticipant target,
         Random rng,
@@ -164,7 +165,7 @@ public sealed class SkillPlayer(IMotionEffectApplier? effectApplier = null)
 
             case GrantEffectMotion grant:
             {
-                var message = effectApplier?.Grant(actor, target, grant);
+                var message = effectApplier?.Grant(actor, target, grant, skill.SkillKey);
                 if (message is not null) logs.Add(message);
                 break;
             }
