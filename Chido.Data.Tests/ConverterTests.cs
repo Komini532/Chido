@@ -55,9 +55,55 @@ public class ConverterTests
     [Fact]
     public void BigIntegerはVARCHAR100に収まる桁数である()
     {
-        // 100桁を超えると格納時に切り詰められる。設計上の上限を明示的に固定しておく
-        var max = BigInteger.Pow(10, 99) - 1;
-        Assert.Equal(99, Numeric.ConvertToProvider(max)!.ToString()!.Length);
+        // 設計上の上限。100桁ちょうどは通る
+        var max = BigInteger.Pow(10, 99);
+        Assert.Equal(100, Numeric.ConvertToProvider(max)!.ToString()!.Length);
+    }
+
+    [Fact]
+    public void BigIntegerは列幅を超えると切り詰めずに例外になる()
+    {
+        // 非STRICTモードのMySQLは超過分を静かに切り詰めるため、
+        // 「桁が落ちた巨大数値」が正しい値として流通する事故が起こりうる。
+        // 桁数の生成列によるランキング順序も値が列幅に収まっていることを前提にしている
+        var tooLarge = BigInteger.Pow(10, 100); // 101桁
+
+        Assert.Throws<OverflowException>(() => Numeric.ConvertToProvider(tooLarge));
+        Assert.Throws<OverflowException>(() => NullableNumeric.ConvertToProvider((BigInteger?)tooLarge));
+    }
+
+    [Fact]
+    public void 負値は符号を含めて列幅に収まる必要がある()
+    {
+        // 符号も1文字を占めるため、100桁の負値は VARCHAR(100) に入らない
+        var negative = -(BigInteger.Pow(10, 99));
+        Assert.Throws<OverflowException>(() => Numeric.ConvertToProvider(negative));
+    }
+
+    [Fact]
+    public void 桁数と辞書順の組がBigIntegerの数値順に一致する()
+    {
+        // exp / amount のランキングが依拠する不変条件そのもの。
+        // 非負の正準10進文字列では (桁数, 序数比較) が数値順と完全に一致する。
+        // これが崩れると exp_len との複合インデックスによる ORDER BY が静かに誤る
+        var random = new Random(20260728);
+        var values = new List<BigInteger> { 0, 1, 9, 10, 99, 100, 101, 999, 1000 };
+        for (var i = 0; i < 500; i++)
+        {
+            var digits = random.Next(1, 101);
+            var text = string.Concat(
+                (char)('1' + random.Next(9)),
+                string.Concat(Enumerable.Range(1, digits - 1).Select(_ => (char)('0' + random.Next(10)))));
+            values.Add(BigInteger.Parse(text));
+        }
+
+        var byNumber = values.OrderBy(v => v).ToList();
+        var byEncoding = values
+            .OrderBy(v => Numeric.ConvertToProvider(v)!.ToString()!.Length)
+            .ThenBy(v => Numeric.ConvertToProvider(v)!.ToString()!, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(byNumber, byEncoding);
     }
 
     [Fact]

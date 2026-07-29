@@ -330,10 +330,47 @@ public class SchemaTests
     [InlineData("chido_title_master", "condition_value")]
     public void BigIntegerの列はすべてVARCHAR100である(string table, string column)
     {
-        // 設計ドキュメントは一部を DECIMAL(65,0) としているが、EF Core 8 + Pomelo 8 には
-        // 「CLR string ／ 格納型 DECIMAL」の型マッピングが存在せず、指定するとモデル確定時に落ちる。
-        // 詳細と代替案は BigIntegerToStringConverter を参照
+        // DECIMAL は使えない。MySqlConnector が DECIMAL 列を decimal へパースするため、
+        // System.Decimal の 28〜29桁を超える値は読み出し時に落ちる（EF ではなくコネクタ側の制約）。
+        // 詳細は BigIntegerToStringConverter を参照
         Assert.Equal("VARCHAR(100)", Column(table, column).GetColumnType());
+    }
+
+    [Theory]
+    [InlineData("chido_battle_status", "exp", "exp_len")]
+    [InlineData("chido_player_currency", "amount", "amount_len")]
+    public void ランキング対象の列は桁数の生成列を持つ(string table, string column, string lengthColumn)
+    {
+        // 10進整数文字列の素の ORDER BY は辞書順（"9" > "10"）になる。
+        // 非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、
+        // 桁数をストアド生成列に持たせて第1ソートキーに使う（Chido.Data.Queries.RankingQueries）
+        var length = Column(table, lengthColumn);
+
+        Assert.Equal("TINYINT UNSIGNED", length.GetColumnType());
+        Assert.Equal($"CHAR_LENGTH(`{column}`)", length.GetComputedColumnSql());
+        Assert.True(length.GetIsStored());
+    }
+
+    [Theory]
+    [InlineData("chido_battle_status", "exp", "exp_len")]
+    [InlineData("chido_player_currency", "amount", "amount_len")]
+    public void ランキング対象の列は照合順序がascii_binである(string table, string column, string _)
+    {
+        // 照合順序に依存せず必ずバイト順で比較させる。インデックスも1バイト/文字になる
+        Assert.Equal("ascii_bin", Column(table, column).GetCollation());
+    }
+
+    [Theory]
+    [InlineData("chido_battle_status", "idx_exp_rank", "exp_len", "exp")]
+    [InlineData("chido_player_currency", "idx_amount_rank", "amount_len", "amount")]
+    public void ランキング用の複合インデックスが定義されている(
+        string table, string indexName, string first, string second)
+    {
+        // 昇順のまま張る。MySQL 8 は ORDER BY exp_len DESC, exp DESC のような全反転を
+        // 昇順インデックスの逆走査（Backward index scan）で処理でき、filesort が出ない
+        var index = Table(table).GetIndexes().Single(i => i.GetDatabaseName() == indexName);
+
+        Assert.Equal([first, second], index.Properties.Select(p => p.GetColumnName()));
     }
 
     [Theory]

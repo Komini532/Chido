@@ -353,7 +353,7 @@ public class EnemyCurrencyMasterConfiguration : IEntityTypeConfiguration<EnemyCu
             .HasColumnName("drop_amount")
             .HasColumnType("VARCHAR(100)")
             .HasConversion(Converters.Numeric)
-            .HasComment("撃破時に確定でドロップする金額（固定値、抽選なし）。設計上は DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+            .HasComment("撃破時に確定でドロップする金額（固定値、抽選なし）。10進整数文字列（BigIntegerToStringConverter 参照）");
     }
 }
 

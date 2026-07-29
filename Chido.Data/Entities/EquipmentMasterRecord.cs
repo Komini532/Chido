@@ -39,7 +39,7 @@ public class EquipmentMasterRecord
     /// <summary>
     /// レベルに対する想定進行度 P(level) の結果値のみを格納する（例: Lv5000 で P(5000)=60）。
     /// レアリティ補正（×1.2^rarity）や各ステータス補正の乗算はアプリ側で都度算出する。
-    /// 手動設定される基礎値であり実運用上巨大化しないため DECIMAL(65,0) UNSIGNED を採用。
+    /// 手動設定される基礎値。10進整数文字列として VARCHAR(100) に格納する。
     /// </summary>
     public BigInteger ProgressionValue { get; set; }
 
