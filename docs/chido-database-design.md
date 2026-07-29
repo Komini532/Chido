@@ -9,6 +9,7 @@
 
 - 開発OS: Windows 11
 - 言語/フレームワーク: C# / .NET 8
+- データベース: MySQL 8.4 LTS（8.0 系は 2026-04-30 にEOL）
 - 開発ツール: Claude Code
 - ホスティングサーバー: Ubuntu 24.04 LTS
 - リポジトリ: https://github.com/Komini532/Chido/
