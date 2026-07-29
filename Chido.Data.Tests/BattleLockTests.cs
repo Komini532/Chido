@@ -110,10 +110,9 @@ public sealed class BattleLockTests(DatabaseFixture fixture)
         await SetLockWaitTimeoutAsync(waiterDb, seconds: 1);
         await using var waiter = await BattleLock.BeginAsync(waiterDb);
 
-        var error = await Assert.ThrowsAsync<MySqlException>(
-            () => waiter.LockChannelAsync(ids.ChannelId));
+        var error = await Record.ExceptionAsync(() => waiter.LockChannelAsync(ids.ChannelId));
 
-        Assert.Equal(LockWaitTimeoutError, error.Number);
+        Assert.Equal(LockWaitTimeoutError, FindMySqlError(error).Number);
     }
 
     [DatabaseFact]
@@ -172,6 +171,24 @@ public sealed class BattleLockTests(DatabaseFixture fixture)
         var seed = (ulong)Random.Shared.NextInt64(1, long.MaxValue);
 
         return new Ids(GuildId: seed, ChannelId: seed + 1, UserId: seed + 2);
+    }
+
+    /// <summary>
+    /// 例外の連鎖から <see cref="MySqlException"/> を取り出す。
+    ///
+    /// EF Core の実行戦略は、ロック待ちタイムアウトのような一過性の失敗をドライバ例外のまま
+    /// 投げず、<c>EnableRetryOnFailure()</c> を促す <see cref="InvalidOperationException"/> に
+    /// 包んで返す。素の型で受けようとすると、排他が効いているのにテストだけが落ちる。
+    /// </summary>
+    private static MySqlException FindMySqlError(Exception? exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is MySqlException mysql) return mysql;
+        }
+
+        throw new Xunit.Sdk.XunitException(
+            $"MySqlException が連鎖に含まれていない: {exception?.ToString() ?? "(例外が発生しなかった)"}");
     }
 
     internal static async Task SeedAsync(ChidoDbContext db, Ids ids)
