@@ -34,7 +34,7 @@ public sealed class EffectApplier(IReadOnlyDictionary<string, EffectDefinition> 
     public string? Grant(
         BattleParticipant granter, BattleParticipant target, GrantEffectMotion motion, string skillKey)
         => Grant(
-            granter, target, motion.EffectKey, AffectReason.Skill,
+            granter.Entity, target.Entity, target.EntityType, motion.EffectKey, AffectReason.Skill,
             grantSourceKey: skillKey,
             effectRate: motion.EffectRate,
             attackType: motion.AttackType,
@@ -48,14 +48,28 @@ public sealed class EffectApplier(IReadOnlyDictionary<string, EffectDefinition> 
     public string? GrantAuto(
         BattleParticipant target, string effectKey,
         Ratio? effectRate = null, AttackType? attackType = null, ushort? durationActions = null)
+        => GrantAuto(
+            target.Entity, target.EntityType, effectKey, effectRate, attackType, durationActions);
+
+    /// <summary>
+    /// 参加者行が存在しない時点での auto 付与。
+    ///
+    /// 敵は<b>セッションに属さない状態で出現しうる</b>（戦闘チャンネルの初期化直後や、
+    /// PlayerVictory 後に誰も行動していない期間。戦闘システム 10.5）。この時点では
+    /// <see cref="BattleParticipant"/> がまだ無いため、エンティティを直接受ける口を用意している。
+    /// </summary>
+    public string? GrantAuto(
+        IEntity target, EntityType entityType, string effectKey,
+        Ratio? effectRate = null, AttackType? attackType = null, ushort? durationActions = null)
         => Grant(
-            target, target, effectKey, AffectReason.Auto,
+            target, target, entityType, effectKey, AffectReason.Auto,
             grantSourceKey: null,
             effectRate: effectRate, attackType: attackType, durationActions: durationActions);
 
     private string? Grant(
-        BattleParticipant granter,
-        BattleParticipant target,
+        IEntity granter,
+        IEntity target,
+        EntityType targetType,
         string effectKey,
         AffectReason affectReason,
         string? grantSourceKey,
@@ -66,9 +80,9 @@ public sealed class EffectApplier(IReadOnlyDictionary<string, EffectDefinition> 
         if (!definitions.TryGetValue(effectKey, out var definition))
             throw new InvalidOperationException($"状態変化マスタに {effectKey} が存在しない。");
 
-        if (target.Entity is not EntityBase holder) return null;
+        if (target is not EntityBase holder) return null;
 
-        var scope = ResolveScope(target.EntityType, definition);
+        var scope = ResolveScope(targetType, definition);
 
         // 「戦闘を跨ぐ状態変化は必ず有限」の担保。テーブルをまたぐ条件のためCHECK制約では表現できず、
         // ここが唯一の防波堤になる。真に永久な効果を許すと、加算合成される永続デバフが
@@ -80,23 +94,23 @@ public sealed class EffectApplier(IReadOnlyDictionary<string, EffectDefinition> 
         }
 
         var duplicate = holder.Effects.FirstOrDefault(
-            e => e.IsDuplicateOf(scope, effectKey, affectReason, granter.Entity.Id, grantSourceKey));
+            e => e.IsDuplicateOf(scope, effectKey, affectReason, granter.Id, grantSourceKey));
 
         if (duplicate is not null)
-            return $"{target.Entity.Name} は既に {definition.Name} の状態です。";
+            return $"{target.Name} は既に {definition.Name} の状態です。";
 
         holder.AddEffect(new EffectInstance(
             definition,
             affectReason,
-            granter.Entity.Id,
+            granter.Id,
             scope,
             grantSourceKey,
             durationActions,
             ResolveStatusModifiers(definition, effectRate, effectKey),
             definition.SlipDamage is null ? null : attackType,
-            ResolveSlipSnapshot(granter.Entity, definition, attackType)));
+            ResolveSlipSnapshot(granter, definition, attackType)));
 
-        return $"{target.Entity.Name} は {definition.Name} の状態になった。";
+        return $"{target.Name} は {definition.Name} の状態になった。";
     }
 
     /// <summary>
