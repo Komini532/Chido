@@ -66,8 +66,33 @@ EXPLAIN SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC 
 -- Extra: Backward index scan; Using index （"Using filesort" が出ないこと）
 ```
 
-CI（`.github/workflows/build.yml`）にはMySQLのサービスコンテナを置いていないため、
-この確認は手元で行う。テスト（`SchemaTests` / `RankingQueryTests`）は実DBに接続せず、
-EF Core が確定させたモデルと `ToQueryString()` を読む形で同じ内容を固定している。
+## 実DBを要するテスト
+
+上記の確認は `Chido.Data.Tests` の `DatabaseSchemaTests` が自動化している
+（DDLの適用・全49テーブルの作成・生成列の算出・ランキングの数値順・逆走査の `EXPLAIN`）。
+CI（`.github/workflows/build.yml`）は MySQL 8.4 のサービスコンテナを立てて毎回これを走らせる。
+
+手元で走らせる場合は、テスト専用のDBを立てて `CHIDO_TEST_MYSQL_CONNECTION` を設定する。
+
+```bash
+docker run -d --name chido-mysql-test -e MYSQL_ROOT_PASSWORD=chido -e MYSQL_DATABASE=chido_test \
+  -p 13306:3306 mysql:8.4 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+
+export CHIDO_TEST_MYSQL_CONNECTION="Server=127.0.0.1;Port=13306;Database=chido_test;User=root;Password=chido;"
+dotnet test Chido.Data.Tests
+```
+
+- **接続文字列の変数は実行時用（`CHIDO_MYSQL_CONNECTION`）と分けている。** これらのテストは
+  対象DBを破棄して作り直すため、本番・開発用のDBを指した状態で走ると中身が消える。
+  データベース名が `_test` で終わらない場合は実行を拒否する二重の歯止めも入れている。
+- **未設定の環境ではスキップされる。** Docker を用意せずに `dotnet test` を打っても落ちない。
+  ただしCIでは `CHIDO_REQUIRE_DATABASE_TESTS=1` を立ててスキップを禁じており、
+  サービスコンテナの設定が壊れた場合は緑にならずに失敗する。
+- **サービスコンテナには `--sql-mode` を渡せない**（`services:` に起動コマンドを書く口が無い）。
+  イメージ既定の `sql_mode` は `STRICT_TRANS_TABLES` を含むより厳しい組み合わせのため、
+  ワークフロー側で `SET GLOBAL sql_mode` を実行して本番と同じ組み合わせへ揃えている。
+
+実DBに接続しないテスト（`SchemaTests` / `RankingQueryTests`）も引き続き併存する。
+EF Core が確定させたモデルと `ToQueryString()` を読む形で、DBを立てずに同じ不変条件を固定している。
 
 排他制御（`SELECT ... FOR UPDATE`）の検証は引き続き Phase 6 で行う。
