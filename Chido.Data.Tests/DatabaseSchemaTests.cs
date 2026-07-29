@@ -24,7 +24,8 @@ namespace Chido.Data.Tests;
 /// 接続先が無い環境ではスキップされる。<see cref="DatabaseFactAttribute"/> を参照。
 /// </para>
 /// </summary>
-public class DatabaseSchemaTests : IClassFixture<DatabaseFixture>
+[Collection(DatabaseCollection.Name)]
+public class DatabaseSchemaTests
 {
     /// <summary>設計ドキュメントの採番1〜45番＋スキルモーションのサブタイプ 10a〜10d。</summary>
     private const int ExpectedTableCount = 49;
