@@ -26,7 +26,7 @@ public class ChannelStateConfiguration : IEntityTypeConfiguration<ChannelStateRe
             .HasColumnName("cumulative_enemy_level")
             .HasColumnType("VARCHAR(100)")
             .HasConversion(Converters.Numeric)
-            .HasComment("累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+            .HasComment("累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。10進整数文字列（BigIntegerToStringConverter 参照）");
 
         e.Property(x => x.CurrentSessionId)
             .HasColumnName("current_session_id")

@@ -44,7 +44,7 @@ public class EquipmentMasterConfiguration : IEntityTypeConfiguration<EquipmentMa
             .HasColumnName("progression_value")
             .HasColumnType("VARCHAR(100)")
             .HasConversion(Converters.Numeric)
-            .HasComment("レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+            .HasComment("レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。10進整数文字列（BigIntegerToStringConverter 参照）");
 
         e.Property(x => x.HpRate)
             .HasColumnName("hp_rate")

@@ -219,7 +219,7 @@ public class BattleEnemyConfiguration : IEntityTypeConfiguration<BattleEnemyReco
             .HasColumnName("level")
             .HasColumnType("VARCHAR(100)")
             .HasConversion(Converters.Numeric)
-            .HasComment("敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+            .HasComment("敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。10進整数文字列（BigIntegerToStringConverter 参照）");
 
         e.HasIndex(x => x.MasterKey)
             .HasDatabaseName("idx_master_key");

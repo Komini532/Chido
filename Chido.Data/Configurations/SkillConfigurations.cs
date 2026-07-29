@@ -42,7 +42,7 @@ public class SkillMasterConfiguration : IEntityTypeConfiguration<SkillMasterReco
             .HasColumnName("learnable_level")
             .HasColumnType("VARCHAR(100)")
             .HasConversion(Converters.NullableNumeric)
-            .HasComment("習得レベル。NULL=レベルアップでは習得不可。設計上は DECIMAL(33,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+            .HasComment("習得レベル。NULL=レベルアップでは習得不可。10進整数文字列。レベル閾値の判定は C# 側で行う（BigIntegerToStringConverter 参照）");
 
         e.Property(x => x.Priority)
             .HasColumnName("priority")

@@ -18,6 +18,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    services:
+      # 実DBを要するテスト（Chido.Data.Tests の DatabaseFact）用のMySQL。
+      # 本番想定と同じ 8.4 LTS を使う（ChidoDbContextFactory の MySqlServerVersion と揃える）。
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: chido
+          # データベース名の '_test' 接尾辞は必須。テストがスキーマを作り直すため、
+          # 誤って本番・開発用DBを指した場合に DatabaseTestEnvironment が実行を拒否する
+          MYSQL_DATABASE: chido_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --protocol=TCP -h 127.0.0.1 -uroot -pchido"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
+          --health-start-period=30s
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,5 +54,21 @@ jobs:
         # 復元済みの状態からビルドし、警告をログに残す
         run: dotnet build Chido.sln --configuration Release --no-restore
 
+      - name: Align MySQL sql_mode with the production server
+        # サービスコンテナには起動コマンドを渡せない（services は image/env/ports/options のみで、
+        # docker run の後ろに続く mysqld の引数を指定する口が無い）。イメージ既定の sql_mode は
+        # STRICT_TRANS_TABLES を含むより厳しい組み合わせのため、本番と同じ組み合わせへ揃える。
+        # GLOBAL の変更は以降に張られる接続に効くので、テスト開始前のこの時点で行う。
+        run: |
+          docker exec "${{ job.services.mysql.id }}" \
+            mysql -uroot -pchido \
+            -e "SET GLOBAL sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION';"
+
       - name: Test
+        env:
+          # 実行時用の CHIDO_MYSQL_CONNECTION とは別の変数。テストはスキーマを作り直すため、
+          # 開発者の手元で本番DBを指した状態で走ることが無いよう変数から分けている
+          CHIDO_TEST_MYSQL_CONNECTION: 'Server=127.0.0.1;Port=3306;Database=chido_test;User=root;Password=chido;'
+          # 接続先が無い場合にスキップで緑にせず落とす。サービスコンテナの設定が壊れたことに気付けるようにする
+          CHIDO_REQUIRE_DATABASE_TESTS: '1'
         run: dotnet test Chido.sln --configuration Release --no-build --verbosity normal

@@ -142,7 +142,7 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("level")
-                        .HasComment("敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+                        .HasComment("敵のレベル。出現時の chido_channel_state.cumulative_enemy_level をそのまま複製する。組の全メンバーが同一レベルとなる。10進整数文字列（BigIntegerToStringConverter 参照）");
 
                     b.Property<string>("MasterKey")
                         .IsRequired()
@@ -344,9 +344,22 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("exp")
-                        .HasComment("経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。設計上はランキング用に DECIMAL(65,0) だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+                        .HasComment("経験値。レベルは √exp で算出。初期値は 1（0 だと level=0 となり全ステータスが0になって成立しない）。10進整数文字列。ランキングは exp_len との複合インデックスで数値順を得る（DECIMAL が使えない理由は BigIntegerToStringConverter 参照）")
+                        .UseCollation("ascii_bin");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<string>("Exp"), "ascii");
+
+                    b.Property<byte>("ExpLength")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("TINYINT UNSIGNED")
+                        .HasColumnName("exp_len")
+                        .HasComputedColumnSql("CHAR_LENGTH(`exp`)", true)
+                        .HasComment("exp の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列");
 
                     b.HasKey("UserId");
+
+                    b.HasIndex("ExpLength", "Exp")
+                        .HasDatabaseName("idx_exp_rank");
 
                     b.ToTable("chido_battle_status", (string)null);
                 });
@@ -385,7 +398,7 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("cumulative_enemy_level")
-                        .HasComment("累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+                        .HasComment("累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。出現する敵の level にそのまま複製される。2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）。10進整数文字列（BigIntegerToStringConverter 参照）");
 
                     b.Property<string>("CurrentFieldKey")
                         .IsRequired()
@@ -570,7 +583,7 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("drop_amount")
-                        .HasComment("撃破時に確定でドロップする金額（固定値、抽選なし）。設計上は DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+                        .HasComment("撃破時に確定でドロップする金額（固定値、抽選なし）。10進整数文字列（BigIntegerToStringConverter 参照）");
 
                     b.HasKey("EnemyKey");
 
@@ -904,7 +917,7 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("progression_value")
-                        .HasComment("レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。設計上は DECIMAL(65,0) UNSIGNED（BigIntegerToStringConverter 参照）");
+                        .HasComment("レベルに対する想定進行度 P(level) の結果値のみを格納（例: Lv5000でP(5000)=60）。レアリティ補正(×1.2^rarity)や各ステータス補正の乗算はアプリ側で都度算出する。10進整数文字列（BigIntegerToStringConverter 参照）");
 
                     b.Property<byte>("Rarity")
                         .HasColumnType("TINYINT UNSIGNED")
@@ -1079,9 +1092,22 @@ namespace Chido.Data.Migrations
                         .IsRequired()
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("amount")
-                        .HasComment("所持金額。設計上はランキング用に DECIMAL(65,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+                        .HasComment("所持金額。10進整数文字列。ランキングは amount_len との複合インデックスで数値順を得る（chido_battle_status.exp と同じ判断基準）")
+                        .UseCollation("ascii_bin");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<string>("Amount"), "ascii");
+
+                    b.Property<byte>("AmountLength")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("TINYINT UNSIGNED")
+                        .HasColumnName("amount_len")
+                        .HasComputedColumnSql("CHAR_LENGTH(`amount`)", true)
+                        .HasComment("amount の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列");
 
                     b.HasKey("UserId");
+
+                    b.HasIndex("AmountLength", "Amount")
+                        .HasDatabaseName("idx_amount_rank");
 
                     b.ToTable("chido_player_currency", (string)null);
                 });
@@ -1337,7 +1363,7 @@ namespace Chido.Data.Migrations
                     b.Property<string>("LearnableLevel")
                         .HasColumnType("VARCHAR(100)")
                         .HasColumnName("learnable_level")
-                        .HasComment("習得レベル。NULL=レベルアップでは習得不可。設計上は DECIMAL(33,0) UNSIGNED だが、BigInteger を DECIMAL 列へマップできないため VARCHAR(100)（BigIntegerToStringConverter 参照）");
+                        .HasComment("習得レベル。NULL=レベルアップでは習得不可。10進整数文字列。レベル閾値の判定は C# 側で行う（BigIntegerToStringConverter 参照）");
 
                     b.Property<string>("Name")
                         .IsRequired()
