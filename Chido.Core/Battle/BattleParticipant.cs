@@ -73,6 +73,24 @@ public class BattleParticipant
     /// </summary>
     public ushort RotationIndex { get; private set; }
 
+    /// <summary>
+    /// 台帳の累計与ダメージ（戦闘システム 6.2）。敵参加者へ与えた<b>実効</b>与ダメージの累計。
+    ///
+    /// <b>報酬に関する単一の基準量である。</b>経験値按分の分子・報酬付与ゲート
+    /// （「累計 &gt; 0」）・被攻撃TPの三者が、いずれもこの実効ダメージを参照する。
+    /// 生ダメージで積むと<b>オーバーキルが他人の取り分を破壊する</b>
+    /// （残りHP1の敵に10000を叩き込んだ参加者が分母を独占し、99%の仕事をした側の取り分がほぼ消える）。
+    /// </summary>
+    public BigInteger TotalDamageDealt { get; private set; }
+
+    /// <summary>与ダメージを台帳へ積む。実効ダメージ（HPが実際に減った量）のみを渡すこと。</summary>
+    public void RecordDamageDealt(BigInteger effectiveDamage)
+    {
+        if (effectiveDamage <= BigInteger.Zero) return;
+
+        TotalDamageDealt += effectiveDamage;
+    }
+
     public BattleParticipant(
         IEntity         entity,
         EntityType      entityType,
