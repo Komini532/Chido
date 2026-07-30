@@ -85,10 +85,21 @@ public sealed class CatalogTests(DatabaseFixture fixture)
         });
         await db.SaveChangesAsync();
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => SkillCatalog.LoadAsync(db));
+        try
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SkillCatalog.LoadAsync(db));
 
-        Assert.Contains("サブタイプ", error.Message);
+            Assert.Contains("サブタイプ", error.Message);
+        }
+        finally
+        {
+            // 不整合な行を残してはならない。カタログは一括読み込みであり、1行の不整合が
+            // 以降のすべての LoadAsync を巻き添えで落とす。実DBはコレクション内で共有され、
+            // テストごとの巻き戻しも行われないため、後始末はこのテストの責務になる
+            await db.SkillMotionMasters.Where(m => m.SkillKey == key).ExecuteDeleteAsync();
+            await db.SkillMasters.Where(s => s.SkillKey == key).ExecuteDeleteAsync();
+        }
     }
 
     [DatabaseFact]
@@ -315,9 +326,43 @@ public sealed class CatalogTests(DatabaseFixture fixture)
 
     // --- ヘルパ ---
 
+    /// <summary>付与・解除モーションの参照先。10c・10d は effect_key にFKを持つ。</summary>
+    private const string SharedEffectKey = "catalog_poison";
+
+    /// <summary>
+    /// 付与・解除モーションの参照先を用意する。
+    ///
+    /// <para>
+    /// スキルモーションのサブタイプのうち 10c・10d は <c>chido_effect_master</c> への
+    /// 明示的なFKを持つため、効果マスタの行が先に無いとモーション行そのものを挿入できない。
+    /// 実DBはコレクション内で共有されるので、既にあれば作り直さない。
+    /// </para>
+    /// </summary>
+    private static async Task EnsureSharedEffectAsync(ChidoDbContext db)
+    {
+        if (await db.EffectMasters.AnyAsync(e => e.EffectKey == SharedEffectKey))
+        {
+            return;
+        }
+
+        db.EffectMasters.Add(new EffectMasterRecord
+        {
+            EffectKey = SharedEffectKey, Name = "毒", ClearOnBattleEnd = true,
+            EffectTypes = EffectType.StatusModifier,
+        });
+        db.EffectStatusModifierMasters.Add(new EffectStatusModifierMasterRecord
+        {
+            EffectKey = SharedEffectKey, TargetStatus = TargetStatus.PAtk,
+            FixedRate = Ratio.FromPercent(-10m),
+        });
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>攻撃・回復・付与・解除・離脱を1本に持つスキル。</summary>
     private static async Task<string> SeedSkillAsync(ChidoDbContext db)
     {
+        await EnsureSharedEffectAsync(db);
+
         var key = $"s{Guid.NewGuid():N}"[..20];
 
         db.SkillMasters.Add(NewSkillMaster(key));
@@ -340,12 +385,12 @@ public sealed class CatalogTests(DatabaseFixture fixture)
         });
         db.SkillMotionEffectMasters.Add(new SkillMotionEffectMasterRecord
         {
-            SkillKey = key, MotionIndex = 2, EffectKey = "catalog_poison",
+            SkillKey = key, MotionIndex = 2, EffectKey = SharedEffectKey,
             EffectRate = null, AttackType = AttackType.Physical, DurationActions = 4,
         });
         db.SkillMotionDispelMasters.Add(new SkillMotionDispelMasterRecord
         {
-            SkillKey = key, MotionIndex = 3, EffectKey = "catalog_poison",
+            SkillKey = key, MotionIndex = 3, EffectKey = SharedEffectKey,
         });
 
         await db.SaveChangesAsync();
