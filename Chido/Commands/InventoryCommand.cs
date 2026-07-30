@@ -2,13 +2,15 @@ using Discord.WebSocket;
 
 namespace Chido.Commands;
 
-public static class InventoryCommand
+/// <summary>
+/// [Phase 9b/9c で実装] 所持アイテムを表示します。
+/// </summary>
+public sealed class InventoryCommand : ISlashCommand
 {
-    public const string Name = "inventory";
-    public const string Description = "所持アイテムの一覧を表示します。";
+    public string Name => "inventory";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
-    {
-        await command.RespondAsync("Command inventory is working!");
-    }
+    public string Description => "所持アイテムを表示します。";
+
+    public Task ExecuteAsync(SocketSlashCommand command)
+        => command.RespondAsync("このコマンドはまだ実装されていません。", ephemeral: true);
 }

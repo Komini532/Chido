@@ -2,13 +2,15 @@ using Discord.WebSocket;
 
 namespace Chido.Commands;
 
-public static class StatusCommand
+/// <summary>
+/// [Phase 9b/9c で実装] プレイヤー情報を表示します。
+/// </summary>
+public sealed class StatusCommand : ISlashCommand
 {
-    public const string Name = "status";
-    public const string Description = "ステータスを表示します。";
+    public string Name => "status";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
-    {
-        await command.RespondAsync("Command status is working!");
-    }
+    public string Description => "プレイヤー情報を表示します。";
+
+    public Task ExecuteAsync(SocketSlashCommand command)
+        => command.RespondAsync("このコマンドはまだ実装されていません。", ephemeral: true);
 }

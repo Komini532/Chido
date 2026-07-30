@@ -27,9 +27,8 @@ public class BattleSessionConfiguration : IEntityTypeConfiguration<BattleSession
             .HasColumnName("channel_id")
             .HasComment("戦闘が発生したチャンネルID。chido_channel_state.channel_id を参照");
 
-        e.Property(x => x.MessageId)
-            .HasColumnName("message_id")
-            .HasComment("戦闘状況を表示している埋め込みメッセージのID（編集対象）");
+        // message_id は持たない。1行動につき1つの新規メッセージを送る方式（行動レスポンスと
+        // 進捗表示を同一メッセージへ集約する）であり、編集し続ける単一の進捗メッセージが存在しない。
 
         // last_action_at は持たない。Timeout による強制終了が廃止され、非同期設計では長時間放置そのものが
         // 許容されるため（終了条件はチャンネルの存否）、全行動で更新しながら誰も読まない列になっていた。

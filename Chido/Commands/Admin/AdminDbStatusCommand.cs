@@ -1,6 +1,7 @@
 using System.Text;
 using Chido.Administration;
 using Chido.Data;
+using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,12 +10,19 @@ namespace Chido.Commands.Admin;
 /// <summary>
 /// DBマイグレーションの適用状況を確認する管理者コマンド。デバッグ・運用確認用。
 /// </summary>
-public static class AdminDbStatusCommand
+public sealed class AdminDbStatusCommand(IDbContextFactory<ChidoDbContext> dbFactory) : ISlashCommand
 {
-    public const string Name = "admin-db-status";
-    public const string Description = "[管理者専用] DBマイグレーションの適用状況を確認します。";
+    public string Name => "admin-db-status";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
+    public string Description => "[管理者専用] DBマイグレーションの適用状況を確認します。";
+
+    public SlashCommandBuilder Build()
+        => new SlashCommandBuilder()
+            .WithName(Name)
+            .WithDescription(Description)
+            .WithDefaultMemberPermissions(GuildPermission.Administrator);
+
+    public async Task ExecuteAsync(SocketSlashCommand command)
     {
         if (!AdminAuthorization.IsAuthorized(command.User.Id))
         {
@@ -24,7 +32,7 @@ public static class AdminDbStatusCommand
 
         await command.DeferAsync(ephemeral: true);
 
-        await using var db = ChidoDbContextFactory.CreateDbContext();
+        await using var db = await dbFactory.CreateDbContextAsync();
 
         try
         {
@@ -38,8 +46,7 @@ public static class AdminDbStatusCommand
             if (pending.Count > 0)
             {
                 sb.AppendLine("--- 未適用一覧 ---");
-                foreach (var name in pending)
-                    sb.AppendLine($"- {name}");
+                foreach (var name in pending) sb.AppendLine($"- {name}");
             }
 
             await command.ModifyOriginalResponseAsync(m => m.Content = sb.ToString());

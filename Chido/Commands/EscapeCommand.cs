@@ -2,13 +2,15 @@ using Discord.WebSocket;
 
 namespace Chido.Commands;
 
-public static class EscapeCommand
+/// <summary>
+/// [Phase 9b/9c で実装] 戦闘から離脱します。
+/// </summary>
+public sealed class EscapeCommand : ISlashCommand
 {
-    public const string Name = "escape";
-    public const string Description = "戦闘から離脱します。";
+    public string Name => "escape";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
-    {
-        await command.RespondAsync("Command escape is working!");
-    }
+    public string Description => "戦闘から離脱します。";
+
+    public Task ExecuteAsync(SocketSlashCommand command)
+        => command.RespondAsync("このコマンドはまだ実装されていません。", ephemeral: true);
 }
