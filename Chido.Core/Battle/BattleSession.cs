@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using Chido.Core.Entities;
 
 namespace Chido.Core.Battle;
@@ -44,6 +45,37 @@ public class BattleSession
     /// 次の消失順の採番。<see cref="BattleParticipant"/> が Active でなくなるときに1度だけ呼ぶ。
     /// </summary>
     internal ushort NextDeactivationOrder() => ++_deactivationOrder;
+
+    /// <summary>
+    /// 与ダメージを台帳へ計上する（戦闘システム 6.2）。ターン解決の
+    /// <c>onDamageDealt</c> に接続する。
+    ///
+    /// <b>計上するのは「プレイヤー参加者が敵参加者へ与えた実効ダメージ」だけ。</b>
+    /// プレイヤーが味方に与えたダメージ（誤爆・巻き込み）は経験値按分の分子・分母のいずれにも
+    /// 含めない。敵の auto 付与による自滅ダメージも、付与者が敵であるため計上されない
+    /// （プレイヤーの仕事量ではないため分母に入れてはならない）。
+    ///
+    /// <c>SlipDamage</c> の与ダメージは<b>付与者</b>へ帰属する。素直に実装すると
+    /// 「敵が自分自身に与えたダメージ」になり、毒付与に徹したプレイヤーが報酬ゲートすら
+    /// 通過できず対象から完全に除外されてしまう。そのため第1引数は行動者ではなく
+    /// 帰属先の entity_id を受ける。
+    /// </summary>
+    /// <param name="attackerEntityId">与ダメージの帰属先。ライブ攻撃は行動者、スリップは付与者。</param>
+    /// <param name="target">被弾側。</param>
+    /// <param name="effectiveDamage">実効ダメージ（HPが実際に減った量）。</param>
+    public void RecordDamageDealt(
+        Guid attackerEntityId, BattleParticipant target, BigInteger effectiveDamage)
+    {
+        if (target.IsPlayer) return;
+
+        var attacker = _participants.FirstOrDefault(p => p.Entity.Id == attackerEntityId);
+
+        // 付与者が既にセッションから見つからない場合（構造上は起こらないが、
+        // 将来セッションを跨ぐ効果が入れば起こりうる）は計上しない
+        if (attacker is not { IsPlayer: true }) return;
+
+        attacker.RecordDamageDealt(effectiveDamage);
+    }
 
     // プレイヤーの戦闘行為（攻撃/スキル/戦闘用アイテム）が発生するたびに呼び出す
     public void RecordAction()
