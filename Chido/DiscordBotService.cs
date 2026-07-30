@@ -1,3 +1,4 @@
+using Chido.Battle;
 using Chido.Commands;
 using Discord;
 using Discord.WebSocket;
@@ -17,6 +18,7 @@ namespace Chido;
 public sealed class DiscordBotService(
     DiscordSocketClient client,
     IEnumerable<ISlashCommand> commands,
+    ChannelCleanupService cleanup,
     ILogger<DiscordBotService> logger) : BackgroundService
 {
     public const string TokenEnvVar = "DISCORD_TOKEN";
@@ -34,6 +36,7 @@ public sealed class DiscordBotService(
         client.Ready += OnReadyAsync;
         client.SlashCommandExecuted += OnSlashCommandAsync;
         client.AutocompleteExecuted += OnAutocompleteAsync;
+        client.ChannelDestroyed += OnChannelDestroyedAsync;
 
         await client.LoginAsync(TokenType.Bot, token);
         await client.StartAsync();
@@ -108,6 +111,29 @@ public sealed class DiscordBotService(
             // 候補が出ないだけで入力自体は続けられるため、ここでは通知せずログに留める
             logger.LogError(ex, "オートコンプリート {Command} の実行に失敗した。",
                 interaction.Data.CommandName);
+        }
+    }
+
+    /// <summary>
+    /// チャンネル消失の能動検知（戦闘システム 6.3 の一層目）。
+    ///
+    /// <para>
+    /// 即時に拾えるが、Bot の停止中や再接続の隙間に落ちうる。取りこぼしは
+    /// <see cref="ChannelWatchdogService"/> の定期検証が回収する。
+    /// 落ちたまま誰も拾わないと、そのセッションに参加していたプレイヤーが
+    /// 永久に他の戦闘へ参加できなくなる。
+    /// </para>
+    /// </summary>
+    private async Task OnChannelDestroyedAsync(SocketChannel channel)
+    {
+        try
+        {
+            await cleanup.CleanupAsync(channel.Id);
+        }
+        catch (Exception ex)
+        {
+            // ここで止めても再接続の契機は来ない。定期検証が拾い直せるようログに残す
+            logger.LogError(ex, "チャンネル {ChannelId} の後始末に失敗した。", channel.Id);
         }
     }
 

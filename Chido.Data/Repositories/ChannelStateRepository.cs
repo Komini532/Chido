@@ -74,5 +74,19 @@ public sealed class ChannelStateRepository(ChidoDbContext db)
         await db.ChannelStates
             .Where(x => x.ChannelId == channelId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        // ExecuteDelete は変更追跡を経由しないため、削除済みの行が Unchanged のまま残る。
+        // 残したまま続けて SaveChanges が走ると、消えた行に対する UPDATE が
+        // 「0行更新」として同時実行の衝突に見える
+        Detach<ChannelCurrentEnemyRecord>(db, x => x.ChannelId == channelId);
+        Detach<ChannelStateRecord>(db, x => x.ChannelId == channelId);
+    }
+
+    private static void Detach<T>(ChidoDbContext db, Func<T, bool> match) where T : class
+    {
+        foreach (var entry in db.ChangeTracker.Entries<T>().Where(e => match(e.Entity)).ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
     }
 }

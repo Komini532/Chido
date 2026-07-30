@@ -3,6 +3,8 @@ using Chido.Data;
 using Chido.Data.Loaders;
 using Chido.Data.Repositories;
 using Chido.Targeting;
+using Discord;
+using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 
 namespace Chido.Battle;
@@ -64,6 +66,36 @@ public sealed class BattleQueries(
             .Where(x => Matches(x.Label, input))
             .OrderBy(x => x.Value, StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>
+    /// 所持装備の候補。値には<b>インスタンスID</b>を載せる。
+    /// 同じ装備を複数所持できる構造であるため、キーでは1つに定まらない。
+    /// </summary>
+    public async Task<IReadOnlyList<(string Label, string Value)>> EquipmentChoicesAsync(
+        ulong userId, string input, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var owned = await new EquipmentRepository(db).OwnedAsync(userId, cancellationToken);
+
+        return owned
+            .Select(x => (
+                Label: x.EquippedPart is null ? x.Name : $"{x.Name}（装着中）",
+                Value: x.InstanceId.ToString()))
+            .Where(x => Matches(x.Label, input))
+            .ToList();
+    }
+
+    /// <summary>装備の候補をそのまま応答する。<c>/equip</c> は <c>[対象]</c> を持たない。</summary>
+    public async Task RespondWithEquipmentAsync(SocketAutocompleteInteraction interaction)
+    {
+        var input = interaction.Data.Current.Value?.ToString() ?? string.Empty;
+
+        var choices = await EquipmentChoicesAsync(interaction.User.Id, input);
+
+        await interaction.RespondAsync(
+            choices.Take(25).Select(c => new AutocompleteResult(c.Label, c.Value)));
     }
 
     /// <summary>所持アイテムの候補。所持数を添える。</summary>

@@ -33,6 +33,9 @@ builder.Services.AddSingleton<DiscordSocketClient>();
 builder.Services.AddSingleton<GameCatalogs>();
 builder.Services.AddSingleton<BattleService>();
 builder.Services.AddSingleton<BattleQueries>();
+builder.Services.AddSingleton<PlayerProfileService>();
+builder.Services.AddSingleton<EquipmentService>();
+builder.Services.AddSingleton<ChannelCleanupService>();
 
 // コマンドは1つの登録点にまとめる。ここに足し忘れるとコマンドが存在しないのと同じになるため、
 // 登録・振り分け・スラッシュコマンドの定義がすべてこの列挙から導かれるようにしている
@@ -44,11 +47,16 @@ builder.Services.AddSingleton<ISlashCommand, UseCommand>();
 builder.Services.AddSingleton<ISlashCommand, TargetCommand>();
 builder.Services.AddSingleton<ISlashCommand, BattleInitCommand>();
 builder.Services.AddSingleton<ISlashCommand, StatusCommand>();
+builder.Services.AddSingleton<ISlashCommand, EquipCommand>();
 builder.Services.AddSingleton<ISlashCommand, InventoryCommand>();
 builder.Services.AddSingleton<ISlashCommand, AdminDbMigrateCommand>();
 builder.Services.AddSingleton<ISlashCommand, AdminDbStatusCommand>();
 
 builder.Services.AddHostedService<DiscordBotService>();
+
+// チャンネル消失のフェイルセーフ検証（C-1）。ChannelDestroyed イベントは
+// Bot の停止中や再接続の隙間に落ちうるため、取りこぼしを1時間以内に回収する
+builder.Services.AddHostedService<ChannelWatchdogService>();
 
 var host = builder.Build();
 
