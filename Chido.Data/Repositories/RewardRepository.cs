@@ -107,6 +107,12 @@ public sealed class RewardRepository(ChidoDbContext db)
     ///
     /// 装備は<b>内容を複製した新しいインスタンスとして発行する</b>。敵の装備インスタンスを
     /// そのまま所有者移転すると、同一の敵から複数プレイヤーが同じ装備を受け取る場合に破綻する。
+    ///
+    /// <b>最後に必ずフラッシュする。</b>続けて走る <see cref="GrantTitlesAsync"/> は
+    /// 所持アイテムをクエリで読み直すが、<b>追加された（Added）エンティティはクエリの結果に
+    /// 現れない</b>ため、フラッシュしないと「今まさに獲得したアイテム」を条件とする称号が
+    /// 取りこぼされる（既存行の更新は同一性解決により追跡中の値が返るので気づきにくい）。
+    /// 呼び出し側のトランザクション内で走るため、フラッシュしても原子性は保たれる。
     /// </summary>
     public async Task ApplyAsync(
         IReadOnlyList<PlayerReward> rewards, CancellationToken cancellationToken = default)
@@ -133,6 +139,8 @@ public sealed class RewardRepository(ChidoDbContext db)
                 });
             }
         }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>所持数を加算する。同じアイテムを既に持っていれば数量だけ増やす。</summary>
