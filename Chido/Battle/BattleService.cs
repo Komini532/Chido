@@ -105,18 +105,28 @@ public sealed class BattleService(
 
         if (existing is null)
         {
+            BattleParticipantRecord joined;
+
             try
             {
-                await sessions.JoinPlayerAsync(
+                joined = await sessions.JoinPlayerAsync(
                     record.SessionId, request.UserId,
                     await sessions.NextPlayerDisplayOrderAsync(record.SessionId, cancellationToken),
                     cancellationToken);
             }
-            catch (InvalidOperationException)
+            catch (SingleSessionViolationException)
             {
-                // 単一セッション制約。別チャンネルの戦闘に参加中である
                 return Reject("既に別の戦闘に参加しています。そちらを終えるか `/escape` してください。");
             }
+
+            // 参加時は全快で初期化する（戦闘システム 3.4）。最大HPは装備と状態変化から
+            // 毎回動的に算出されるため、実体を組み立てるまで確定しない。
+            // ここを省くと参加者は現在HP0で戦場に出て、最初の反撃でそのまま戦闘不能になる
+            var entity = await new PlayerLoader(db, catalogs.Effects)
+                .LoadAsync(request.UserId, joined.EntityId, cancellationToken);
+
+            joined.CurrentHp = entity.MaxLife;
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         // 5. 戦場の復元

@@ -115,8 +115,7 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
         var (guildId, channelId, userId) = NewIds();
 
         await world.InitializeAsync(channelId);
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
 
         await using (var db = await fixture.CreateContextAsync())
         {
@@ -144,12 +143,9 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
         await world.InitializeAsync(channelId);
 
         // 他プレイヤーがセッションを開いておく。自分が離脱してもセッションは終了しない
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, other, "other"));
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Escape, guildId, channelId, userId, "prime"));
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, other);
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
+        await world.ActAsync(BattleActionKind.Escape, guildId, channelId, userId);
 
         var outcome = await world.Battles.ExecuteAsync(
             new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
@@ -168,8 +164,7 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
         await world.InitializeAsync(channelId);
         await world.InitializeAsync(otherChannel);
 
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
 
         var outcome = await world.Battles.ExecuteAsync(
             new BattleActionRequest(BattleActionKind.Defend, guildId, otherChannel, userId, "prime"));
@@ -282,17 +277,23 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
     }
 
     [DatabaseFact]
-    public async Task 防御で得たダメージ軽減が次のコマンドまで残る()
+    public async Task 戦闘内スコープの状態変化がコマンドをまたいで残る()
     {
-        // 戦闘内スコープの状態変化がコマンドをまたいで生き残ることの確認。
-        // ここが欠けると、マスタ上は定義されている挙動が実行時にだけ消える
+        // ここが欠けると、マスタ上は定義されている挙動が実行時にだけ消える。
+        // 防御（duration_actions = 1）は付与したターンの終わりに減衰で消えるため、
+        // 「またいで残る」ことの確認には複数行動の効果を使う
         var world = await NewWorldAsync();
         var (guildId, channelId, userId) = NewIds();
 
         await world.InitializeAsync(channelId);
+        await world.LearnAsync(userId, BattleWorld.BuffSkillKey);
 
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
+        var outcome = await world.Battles.ExecuteAsync(
+            new BattleActionRequest(
+                BattleActionKind.Skill, guildId, channelId, userId, "prime",
+                SkillKey: BattleWorld.BuffSkillKey));
+
+        Assert.True(outcome.Accepted, string.Join(" / ", outcome.Message.Trailing));
 
         await using var db = await fixture.CreateContextAsync();
 
@@ -305,7 +306,56 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
         var effect = await db.BattleEffects.FirstOrDefaultAsync(x => x.EntityId == participant.EntityId);
 
         Assert.NotNull(effect);
-        Assert.Equal(Core.GameConstants.DefendSkillKey, effect.EffectKey);
+        Assert.Equal(BattleWorld.BuffEffectKey, effect.EffectKey);
+
+        // 付与したターンの終わりに関与者集合として1つ消費されている。
+        // 減衰の結果が書き戻されていなければ持続が減らないままになる
+        Assert.Equal<ushort?>(BattleWorld.BuffDuration - 1, effect.RemainingActions);
+    }
+
+    [DatabaseFact]
+    public async Task 持続1の状態変化は付与したターンの終わりに消える()
+    {
+        // 防御はそのターンの反撃を軽減して役目を終える。関与者集合の減衰が
+        // 書き戻されていなければ、ここに行が残り続けて永続的な軽減になってしまう
+        var world = await NewWorldAsync();
+        var (guildId, channelId, userId) = NewIds();
+
+        await world.InitializeAsync(channelId);
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
+
+        await using var db = await fixture.CreateContextAsync();
+
+        var session = await new BattleSessionRepository(db).FindActiveAsync(channelId);
+        Assert.NotNull(session);
+
+        var participant = await db.BattleParticipants
+            .FirstAsync(x => x.SessionId == session.SessionId && x.UserId == userId);
+
+        Assert.False(await db.BattleEffects.AnyAsync(x => x.EntityId == participant.EntityId));
+    }
+
+    [DatabaseFact]
+    public async Task 参加時は全快で戦場に出る()
+    {
+        // 参加者行は現在HP0で作られる。実体を組み立てて最大HPを書き戻さないと、
+        // 参加者は0で戦場に出て最初の反撃でそのまま戦闘不能になる（戦闘システム 3.4）
+        var world = await NewWorldAsync();
+        var (guildId, channelId, userId) = NewIds();
+
+        await world.InitializeAsync(channelId);
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
+
+        await using var db = await fixture.CreateContextAsync();
+
+        var session = await new BattleSessionRepository(db).FindActiveAsync(channelId);
+        Assert.NotNull(session);
+
+        var participant = await db.BattleParticipants
+            .FirstAsync(x => x.SessionId == session.SessionId && x.UserId == userId);
+
+        Assert.Equal(ParticipantStatus.Active, participant.Status);
+        Assert.True(participant.CurrentHp > BigInteger.Zero, "現在HPが0のまま戦場に出ている");
     }
 
     [DatabaseFact]
@@ -318,13 +368,11 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
         await world.InitializeAsync(channelId);
 
         // 撃破してしまわないよう防御を選ぶ。反撃は受けるため被攻撃TPも入る
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
 
         var first = await world.CurrentTpAsync(channelId, userId);
 
-        await world.Battles.ExecuteAsync(
-            new BattleActionRequest(BattleActionKind.Defend, guildId, channelId, userId, "prime"));
+        await world.ActAsync(BattleActionKind.Defend, guildId, channelId, userId);
 
         var second = await world.CurrentTpAsync(channelId, userId);
 
@@ -414,6 +462,20 @@ public sealed class BattleServiceTests(BattleDatabaseFixture fixture)
             });
 
             await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// 前提を組み立てるための行動。<b>成立を確かめてから進む。</b>
+        /// 拒否が黙って通ると、後続の Assert が別の原因で落ちて診断が迷走する。
+        /// </summary>
+        public async Task ActAsync(
+            BattleActionKind kind, ulong guildId, ulong channelId, ulong userId)
+        {
+            var outcome = await Battles.ExecuteAsync(
+                new BattleActionRequest(kind, guildId, channelId, userId, "prime"));
+
+            Assert.True(outcome.Accepted,
+                $"{kind} が拒否された: {string.Join(" / ", outcome.Message.Trailing)}");
         }
 
         public async Task<ushort> CurrentTpAsync(ulong channelId, ulong userId)

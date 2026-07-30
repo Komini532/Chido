@@ -32,6 +32,18 @@ public static class BattleWorld
     public const string HealSkillKey = "test_heal";
 
     /// <summary>
+    /// 複数行動にわたって残る自己強化。<b>戦闘内スコープの状態変化がコマンドをまたいで
+    /// 生き残ることを確かめるためにある。</b>防御（<c>duration_actions = 1</c>）では
+    /// 付与したターンの終わりに減衰で消えるため、この検証には使えない。
+    /// </summary>
+    public const string BuffSkillKey = "test_buff";
+
+    public const string BuffEffectKey = "test_buff_effect";
+
+    /// <summary>強化の持続。1ターン減衰した後も残ることを見たいので2以上にする。</summary>
+    public const ushort BuffDuration = 3;
+
+    /// <summary>
     /// 敵の素早さ。プレイヤー（<see cref="GameConstants.PlayerBaseSpeed"/>）より遅くしておく。
     /// 行動順が入れ替わると「先攻の一撃で後攻がキャンセルされる」経路に入り、
     /// 検証したい内容と無関係なところで結果が揺れる。
@@ -125,6 +137,16 @@ public static class BattleWorld
         {
             SkillKey = HealSkillKey, MotionIndex = 0, AttackType = AttackType.Magical, Power = 50,
         });
+
+        // 複数行動にわたって残る自己強化
+        db.SkillMasters.Add(NewSkill(BuffSkillKey, "きあいだめ"));
+        db.SkillMotionMasters.Add(NewMotion(BuffSkillKey, 0, MotionType.GrantEffect, TargetRule.Myself));
+        db.SkillMotionEffectMasters.Add(new SkillMotionEffectMasterRecord
+        {
+            SkillKey = BuffSkillKey, MotionIndex = 0,
+            EffectKey = BuffEffectKey, EffectRate = null,
+            AttackType = AttackType.Physical, DurationActions = BuffDuration,
+        });
     }
 
     /// <summary>防御のDRRと、敵が自分に掛ける毒（auto 付与の検証用）。</summary>
@@ -150,6 +172,18 @@ public static class BattleWorld
         db.EffectSlipDamageMasters.Add(new EffectSlipDamageMasterRecord
         {
             EffectKey = PoisonKey, Power = 10, Elements = Element.None,
+        });
+
+        db.EffectMasters.Add(new EffectMasterRecord
+        {
+            EffectKey = BuffEffectKey, Name = "気合",
+            ClearOnBattleEnd = true, EffectTypes = EffectType.StatusModifier,
+        });
+        db.EffectStatusModifierMasters.Add(new EffectStatusModifierMasterRecord
+        {
+            EffectKey = BuffEffectKey,
+            TargetStatus = TargetStatus.PAtk,
+            FixedRate = Ratio.FromPercent(10m),
         });
     }
 

@@ -95,8 +95,7 @@ public sealed class BattleSessionRepository(ChidoDbContext db)
         {
             if (membership.SessionId != sessionId)
             {
-                throw new InvalidOperationException(
-                    $"プレイヤー {userId} は既に別のセッション {membership.SessionId} に参加している。");
+                throw new SingleSessionViolationException(userId, membership.SessionId);
             }
 
             return await db.BattleParticipants
