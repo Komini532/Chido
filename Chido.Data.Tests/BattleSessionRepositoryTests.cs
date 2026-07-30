@@ -90,9 +90,12 @@ public sealed class BattleSessionRepositoryTests(DatabaseFixture fixture)
         await scope.LockChannelAsync(second.ChannelId);
         var sessionB = await sessions.CreateAsync(second.GuildId, second.ChannelId);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+        // 専用の型で投げる。呼び出し側はこれを正常系の拒否として扱うため、
+        // 実装の不具合と同じ型にすると、本当の失敗が無関係な案内に化けて表に出なくなる
+        var error = await Assert.ThrowsAsync<SingleSessionViolationException>(
             () => sessions.JoinPlayerAsync(sessionB.SessionId, first.UserId, displayOrder: 0));
 
+        Assert.Equal(first.UserId, error.UserId);
         Assert.Contains(sessionA.ToString(), error.Message);
     }
 
