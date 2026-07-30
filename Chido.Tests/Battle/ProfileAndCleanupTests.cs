@@ -68,7 +68,10 @@ public sealed class ProfileAndCleanupTests(BattleDatabaseFixture fixture)
         var effect = Assert.Single(profile.Effects);
         Assert.Equal(CurseKey, effect.EffectKey);
         Assert.Equal(EffectScope.Player, effect.Scope);
-        Assert.Equal<ushort?>(7, effect.RemainingActions);
+
+        // 行動者は関与者集合に入るため、そのターンで1つ消費される。
+        // 永続スコープの減衰が戦闘行動を通して効いていることの確認でもある
+        Assert.Equal<ushort?>(6, effect.RemainingActions);
     }
 
     [DatabaseFact]
