@@ -3,6 +3,7 @@ using Chido.Core.Entities;
 using Chido.Core.Entities.Enemies;
 using Chido.Core.Stats;
 using Chido.Core.World;
+using Chido.Data.Catalogs;
 using Chido.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,12 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
     private readonly Dictionary<string, List<EnemyEquipmentOption>> equipmentOptions;
     private readonly Dictionary<string, List<EnemyAutoEffect>> autoEffects;
 
+    /// <summary>
+    /// 保有スキルの供給元。省略された場合、生成される敵はスキルを持たず通常攻撃へフォールバックする
+    /// （マスタ未投入の段階でも組の生成は成立させる）。
+    /// </summary>
+    private readonly SkillCatalog? skills;
+
     private DatabaseWorldCatalog(
         HashSet<string> fields,
         Dictionary<string, List<RarityWeight>> rarityWeights,
@@ -41,8 +48,10 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
         Dictionary<string, List<EnemyGroupMember>> groupMembers,
         Dictionary<string, EnemyMasterRecord> enemies,
         Dictionary<string, List<EnemyEquipmentOption>> equipmentOptions,
-        Dictionary<string, List<EnemyAutoEffect>> autoEffects)
+        Dictionary<string, List<EnemyAutoEffect>> autoEffects,
+        SkillCatalog? skills)
     {
+        this.skills = skills;
         this.fields = fields;
         this.rarityWeights = rarityWeights;
         this.groupsByField = groupsByField;
@@ -54,8 +63,12 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
     }
 
     /// <summary>マスタを一括で読み込む。Bot起動時とマスタ投入後に1回だけ呼ぶ。</summary>
+    /// <param name="skills">
+    /// 生成する敵へ載せる保有スキル。<c>chido_enemy_skills_master</c> の解決を本型が
+    /// 内側で行うことで、出現・復元のどちらの経路を通っても敵が必ずスキルを持つ。
+    /// </param>
     public static async Task<DatabaseWorldCatalog> LoadAsync(
-        ChidoDbContext db, CancellationToken cancellationToken = default)
+        ChidoDbContext db, SkillCatalog? skills = null, CancellationToken cancellationToken = default)
     {
         var fields = (await db.FieldMasters.Select(x => x.FieldKey).ToListAsync(cancellationToken))
             .ToHashSet();
@@ -110,7 +123,7 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
 
         return new DatabaseWorldCatalog(
             fields, rarityWeights, groupsByField, transitions,
-            groupMembers, enemies, equipmentOptions, autoEffects);
+            groupMembers, enemies, equipmentOptions, autoEffects, skills);
     }
 
     public bool HasField(string fieldKey) => fields.Contains(fieldKey);
@@ -134,13 +147,19 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
         => autoEffects.TryGetValue(enemyKey, out var value) ? value : [];
 
     /// <summary>
-    /// 敵マスタから素のインスタンスを作る。
-    ///
-    /// 保有スキルは <c>chido_enemy_skills_master</c> にあるが、スキル本体
-    /// （<see cref="Chido.Core.Battle.Skills.Skill"/>）の組み立てはモーションのサブタイプ4種の
-    /// 読み出しを伴うため、スキルマスタの投入と合わせて別途供給する。
+    /// 敵マスタから出現インスタンスを作る。保有スキルは本型が保持する
+    /// <see cref="SkillCatalog"/> から供給される。
     /// </summary>
-    public Enemy CreateEnemy(string enemyKey, BigInteger level)
+    public Enemy CreateEnemy(string enemyKey, BigInteger level) => CreateEnemy(enemyKey, level, null);
+
+    /// <summary>
+    /// 識別子を指定して敵を作る。既存の出現インスタンスを参加者行から復元する経路で使う。
+    /// </summary>
+    /// <param name="entityId">
+    /// 参加者行の <c>entity_id</c>。<c>CurrentTarget</c> と台帳の帰属がこのIDで解決されるため、
+    /// 戦闘中は参加者と実体の識別子を一致させる必要がある。
+    /// </param>
+    public Enemy CreateEnemy(string enemyKey, BigInteger level, Guid? entityId)
     {
         if (!enemies.TryGetValue(enemyKey, out var master))
         {
@@ -159,7 +178,9 @@ public sealed class DatabaseWorldCatalog : IFieldCatalog, IEnemyCatalog
             innateElements: master.Elements,
             initialTp: master.InitialTp,
             actionPatternType: master.ActionPatternType,
-            allyTargetRule: master.AllyTargetRule);
+            allyTargetRule: master.AllyTargetRule,
+            skills: skills?.SkillsOf(enemyKey),
+            entityId: entityId);
     }
 
     private static EnemyEquipmentOption ToOption(

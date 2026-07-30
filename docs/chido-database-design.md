@@ -1282,11 +1282,19 @@ CREATE TABLE chido_channel_state (
     cumulative_enemy_level VARCHAR(100)           NOT NULL,             -- 累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。10進整数文字列。
                                                                         -- 出現する敵の level にそのまま複製される。
                                                                         -- この値が 2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）
-    current_session_id     BINARY(16)             NULL                  -- chido_battle_session.session_id を参照。NULL=進行中のセッションなし。
+    current_session_id     BINARY(16)             NULL,                 -- chido_battle_session.session_id を参照。NULL=進行中のセッションなし。
                                                                         -- 1チャンネル1行という構造により「アクティブなセッションは1つ以下」が導かれ、
                                                                         -- セッション生成レースを本行のロックで直列化できる
+    current_group_key      VARCHAR(64)            NULL,                 -- chido_enemy_group_master.group_key を参照。現在出現中の組。NULL=未抽選（初期化直後）
+    current_rarity         TINYINT UNSIGNED       NULL                  -- 現在出現中の組のレアリティ。NULL=未抽選（初期化直後）
 );
 ```
+
+**現在出現中の組を記録する理由（第5次改訂）**: 戦闘システム 10.3 の次の出現の計画は、`PlayerEscaped` のときに直前の組のレアリティで分岐し、`Common`/`Uncommon` であれば**同一の `group_key` を再出現させる**。したがって「直前に何が出ていたか」を知らなければ計画そのものが立たない。
+
+どちらも**出現中の敵からは逆引きできない**。`chido_channel_current_enemy` から辿れるのは `chido_battle_enemy.master_key`（メンバーの種族キー）であり、同じメンバー構成の組が複数あれば組は一意に定まらない。レアリティも `chido_field_enemy_group_master` は「(フィールド, レアリティ) → 組」の対応であり、同じ組が複数のフィールド・レアリティに登録されうるため逆引きは一意にならない。
+
+Phase 9b の実装時に、戦闘システムドキュメントが要求する値をDB設計側が保持していないことが判明したため、**戦闘ロジックの正は戦闘システムドキュメント**という優先順位に従い本表に2列を追加した（マイグレーション `AddChannelCurrentGroup`）。
 
 行は戦闘チャンネル初期化コマンドの実行時に`INSERT`される。PK重複により再実行は失敗し、これが冪等性を担保する（初期化は「既にあるものを消去して作り直す」機能を伴わない）。
 

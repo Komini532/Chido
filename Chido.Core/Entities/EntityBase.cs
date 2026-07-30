@@ -94,6 +94,16 @@ public abstract class EntityBase : IEntity
     public void RestoreToFull() => CurrentLife = MaxLife;
 
     /// <summary>
+    /// 永続化された現在HPを復元する。
+    ///
+    /// <b><see cref="RestoreToFull"/> と違い MaxLife を参照しない。</b>格納値をそのまま書き戻すため、
+    /// オーバーヒール状態も、装備を外して最大HPが下がった状態も、保存された通りに戻る。
+    /// 最大HPで切り詰めると、コマンドをまたぐたびにHPが目減りしていく（3.4 が禁じている
+    /// 「装備を外して戻すとHPが減る」と同じ現象が、リロードのたびに起きる形になる）。
+    /// </summary>
+    public void RestoreLife(BigInteger currentLife) => CurrentLife = currentLife;
+
+    /// <summary>
     /// ダメージを適用し、実効ダメージ（＝ min(damage, 適用直前の現在HP)）を返す。
     ///
     /// 最低1の保証はここでは行わない。それはダメージパイプライン側の責務であり（戦闘システム 5.1）、

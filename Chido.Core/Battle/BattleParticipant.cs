@@ -111,6 +111,36 @@ public class BattleParticipant
 
     public void SetTarget(Guid? targetEntityId) => CurrentTargetId = targetEntityId;
 
+    /// <summary>
+    /// 永続化された可変状態を復元する（参加者行の書き戻しと対になる操作）。
+    ///
+    /// <para>
+    /// <b><see cref="DeactivationOrder"/> は復元しない。</b>そのための列も持たない。
+    /// この値が要るのは「敵側の生存が0になった、まさにそのターン」の終了理由を分けるときだけであり、
+    /// 生存が0になった時点でセッションはその場で終了する。したがって次のコマンドが読み込む時点では
+    /// 「Active な敵が1体以上いる」ことが常に成り立ち、消失順を決めるのはそのターン中に
+    /// 新しく Active でなくなった参加者に限られる。復元済みの参加者が null（＝比較上は 0）に
+    /// 揃っていても、ターン中に採番された値がそれらを必ず上回るため判定は正しく働く。
+    /// </para>
+    /// <para>
+    /// <c>Deactivate</c> を経由しないのも同じ理由による。経由すると復元しただけで消失順が
+    /// 採番され、そのターンに実際に消失した参加者と区別が付かなくなる。
+    /// </para>
+    /// </summary>
+    public void RestoreState(
+        ParticipantStatus status,
+        ushort currentTp,
+        ushort rotationIndex,
+        Guid? currentTargetId,
+        BigInteger totalDamageDealt)
+    {
+        Status = status;
+        CurrentTp = Clamp(currentTp);
+        RotationIndex = rotationIndex;
+        CurrentTargetId = currentTargetId;
+        TotalDamageDealt = totalDamageDealt;
+    }
+
     public void MarkDefeated() => Deactivate(ParticipantStatus.Defeated);
 
     public void MarkEscaped() => Deactivate(ParticipantStatus.Escaped);

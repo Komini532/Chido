@@ -1,28 +1,21 @@
+using Chido.Battle;
 using Discord;
 using Discord.WebSocket;
 
 namespace Chido.Commands;
 
-/// <summary>
-/// [Phase 9b で実装] 通常攻撃を行います。
-/// </summary>
-public sealed class AttackCommand : ISlashCommand
+/// <summary>通常攻撃。習得手続きなしで常に使える（習得管理の対象外）。</summary>
+public sealed class AttackCommand(BattleService battles, BattleQueries queries)
+    : BattleCommandBase(battles, queries)
 {
-    public const string OptionTarget = "target";
+    public override string Name => "attack";
 
-    public string Name => "attack";
+    public override string Description => "通常攻撃を行います。";
 
-    public string Description => "通常攻撃を行います。";
+    protected override string Title => "通常攻撃";
 
-    public SlashCommandBuilder Build()
-        => new SlashCommandBuilder()
-            .WithName(Name)
-            .WithDescription(Description)
-            // [対象] はオートコンプリート付きの任意入力文字列（戦闘システム 9.2）。
-            // 固定の選択式にしないのは、同時に複数体出現しうる敵から柔軟に指定できるようにするため
-            .AddOption(OptionTarget, ApplicationCommandOptionType.String, "対象（省略可）",
-                isRequired: false, isAutocomplete: true);
+    public override SlashCommandBuilder Build() => WithTarget(base.Build());
 
-    public Task ExecuteAsync(SocketSlashCommand command)
-        => command.RespondAsync("このコマンドはまだ実装されていません。", ephemeral: true);
+    protected override BattleActionRequest BuildRequest(SocketSlashCommand command)
+        => NewRequest(command, BattleActionKind.Attack);
 }

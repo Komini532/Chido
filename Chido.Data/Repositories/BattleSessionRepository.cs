@@ -1,3 +1,4 @@
+using System.Numerics;
 using Chido.Core.Battle;
 using Chido.Core.Entities;
 using Chido.Data.Entities;
@@ -131,6 +132,43 @@ public sealed class BattleSessionRepository(ChidoDbContext db)
         return participant;
     }
 
+    /// <summary>
+    /// セッション内のプレイヤー参加者行を引く。参加中セッションの記録（<c>membership</c>）とは独立に、
+    /// <b>参加者行の有無そのもの</b>を見る。
+    ///
+    /// 離脱すると参加中セッションの記録は外れるが参加者行は残るため、この2つは食い違う。
+    /// 「離脱後は同じ戦闘に再参加できない」（戦闘システム 4.3・B-13）を成り立たせているのは
+    /// 残り続ける参加者行のほうであり、記録の有無で判定すると再参加を許してしまう。
+    /// </summary>
+    public Task<BattleParticipantRecord?> FindParticipantAsync(
+        Guid sessionId, ulong userId, CancellationToken cancellationToken = default)
+        => db.BattleParticipants
+            .FirstOrDefaultAsync(x => x.SessionId == sessionId && x.UserId == userId, cancellationToken);
+
+    /// <summary>
+    /// 参加中セッションの記録を外す。参加者行は<b>残す</b>。
+    ///
+    /// <b>離脱したプレイヤーの拘束を解く唯一の経路である</b>（戦闘システム 4.3）。
+    /// 呼び忘れると、離脱したはずのプレイヤーがそのセッションが終わるまで
+    /// 他の戦闘に参加できないままになる。セッションの終了を待たずに解ける点が
+    /// <see cref="FinishAsync"/> の一括削除との違い。
+    /// </summary>
+    public async Task LeaveAsync(ulong userId, CancellationToken cancellationToken = default)
+    {
+        await db.PlayerInBattleSessions
+            .Where(x => x.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        // ExecuteDelete は変更追跡を経由しないため、削除済みの行が Unchanged のまま残る。
+        // 同じ DbContext で別セッションへ参加すると主キーが衝突するため追跡から外す
+        foreach (var entry in db.ChangeTracker.Entries<PlayerInBattleSessionRecord>()
+                     .Where(e => e.Entity.UserId == userId)
+                     .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
     /// <summary>セッションの参加者行をすべて読む。表示順は entity_type ごとに独立。</summary>
     public Task<List<BattleParticipantRecord>> LoadParticipantsAsync(
         Guid sessionId, CancellationToken cancellationToken = default)
@@ -188,6 +226,11 @@ public sealed class BattleSessionRepository(ChidoDbContext db)
     /// ステータスは保持せず参照のたびに算出するため（戦闘システム 2.5）、
     /// 永続化するのは<b>算出できない値のみ</b>＝状態・現在HP・現在TP・現在ターゲット・
     /// ローテーション位置・累積与ダメージに限る。
+    ///
+    /// 消失順（<c>DeactivationOrder</c>）には対応する列が無く、書き戻しの対象でもない。
+    /// あの値が要るのは「敵側の生存が0になった、まさにそのターン」だけであり、
+    /// そのターンのうちにセッションが終了するため、次のコマンドまで持ち越す必要がない
+    /// （<c>BattleParticipant.RestoreState</c> 参照）。
     /// </summary>
     public async Task SaveParticipantStateAsync(
         BattleParticipant participant, CancellationToken cancellationToken = default)
@@ -200,5 +243,54 @@ public sealed class BattleSessionRepository(ChidoDbContext db)
         record.CurrentTp = participant.CurrentTp;
         record.CurrentTargetId = participant.CurrentTargetId;
         record.RotationIndex = (byte)participant.RotationIndex;
+
+        // 台帳。報酬の按分・付与ゲート・被攻撃TPが同じ量を参照するため、
+        // ここが漏れるとコマンドをまたいだ貢献が積み上がらず、全員が最後の1行動ぶんで評価される
+        record.TotalDamageDealt = participant.TotalDamageDealt;
     }
+
+    /// <summary>
+    /// 敵を参加者として登録する。<b>チャンネルに出現中の敵がセッションへ引き込まれる契機</b>であり、
+    /// セッション生成の直後に組の全メンバーぶんを呼ぶ。
+    ///
+    /// <c>display_order</c> は組の <c>member_index</c>（＝<c>spawn_index</c>）の恒等複製であり、
+    /// ターゲット自動再選定における「先頭の敵」の唯一の根拠になる。
+    /// </summary>
+    public async Task<BattleParticipantRecord> JoinEnemyAsync(
+        Guid sessionId, Guid enemyId, ushort displayOrder, ushort initialTp,
+        BigInteger currentHp, CancellationToken cancellationToken = default)
+    {
+        var existing = await db.BattleParticipants
+            .FirstOrDefaultAsync(x => x.SessionId == sessionId && x.EnemyId == enemyId, cancellationToken);
+
+        if (existing is not null) return existing;
+
+        var participant = new BattleParticipantRecord
+        {
+            SessionId = sessionId,
+            EntityId = Guid.NewGuid(),
+            EntityType = EntityType.Enemy,
+            UserId = null,
+            EnemyId = enemyId,
+            Status = ParticipantStatus.Active,
+            CurrentHp = currentHp,
+            CurrentTp = initialTp,
+            CurrentTargetId = null,
+            RotationIndex = 0,
+            DisplayOrder = displayOrder,
+            TotalDamageDealt = 0,
+            JoinedAt = DateTime.UtcNow,
+        };
+
+        db.BattleParticipants.Add(participant);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return participant;
+    }
+
+    /// <summary>プレイヤー参加者の次の表示順。参加順にそのまま並ぶ。</summary>
+    public async Task<ushort> NextPlayerDisplayOrderAsync(
+        Guid sessionId, CancellationToken cancellationToken = default)
+        => (ushort)await db.BattleParticipants
+            .CountAsync(x => x.SessionId == sessionId && x.EntityType == EntityType.Player, cancellationToken);
 }

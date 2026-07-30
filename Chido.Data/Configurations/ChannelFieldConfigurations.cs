@@ -33,6 +33,16 @@ public class ChannelStateConfiguration : IEntityTypeConfiguration<ChannelStateRe
             .HasColumnType("BINARY(16)")
             .HasConversion(Converters.NullableBinary)
             .HasComment("chido_battle_session.session_id を参照。NULL=進行中のセッションなし。1チャンネル1行という構造により「アクティブなセッションは1つ以下」が導かれ、セッション生成レースを本行のロックで直列化できる");
+
+        e.Property(x => x.CurrentGroupKey)
+            .HasColumnName("current_group_key")
+            .HasColumnType("VARCHAR(64)")
+            .HasComment("chido_enemy_group_master.group_key を参照。現在出現中の組。NULL=未抽選（初期化直後）。PlayerEscaped かつ前組が Common/Uncommon の場合は同一の group_key が再出現するため、次の出現の計画に必須（戦闘システム 10.3）。出現中の敵の集合からは逆引きできない");
+
+        e.Property(x => x.CurrentRarity)
+            .HasColumnName("current_rarity")
+            .HasColumnType("TINYINT UNSIGNED")
+            .HasComment("現在出現中の組のレアリティ。NULL=未抽選（初期化直後）。PlayerEscaped のレアリティ分岐（Rare 以上から降りたら Common へ落とす）と撃破報酬の根拠。chido_field_enemy_group_master からは同じ組が複数のフィールド・レアリティに登録されうるため逆引きできない");
     }
 }
 

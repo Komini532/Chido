@@ -3,6 +3,7 @@ using Chido.Core.Entities;
 using Chido.Core.Stats;
 using Chido.Data.Catalogs;
 using Chido.Data.Entities;
+using Chido.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Chido.Data.Loaders;
@@ -94,11 +95,9 @@ public sealed class PlayerLoader(ChidoDbContext db, EffectCatalog effects)
     /// <summary>
     /// 永続スコープの状態変化を復元する。
     ///
-    /// ステータス変動の実値（<c>chido_effect_status_modifier_instance</c>）は
-    /// マスタの固定変動と付与時の <c>effect_rate</c> の合成であり、インスタンス側に複製されている。
-    /// ここではマスタの固定変動のみを載せる。永続スコープの効果は現状すべて固定変動であり、
-    /// 不定値を持つ効果は付与時にインスタンス側へ複製されるため、
-    /// その読み出しはインスタンステーブルの実装と合わせて行う。
+    /// ステータス変動の実値は「マスタの <c>fixed_rate</c> を持つ行はその値、持たない行は
+    /// インスタンス側（21番）の実値」という付与時と同じ規則で決まる。両スコープが同じ共有テーブルを
+    /// 使うため、組み立ては <c>EffectInstanceRows</c> の1箇所に寄せてある。
     /// </summary>
     private async Task<List<EffectInstance>> LoadEffectsAsync(
         ulong userId, CancellationToken cancellationToken)
@@ -110,6 +109,9 @@ public sealed class PlayerLoader(ChidoDbContext db, EffectCatalog effects)
             .OrderBy(x => x.InstanceId)
             .ToListAsync(cancellationToken);
 
+        var details = await EffectInstanceRows.ReadAsync(
+            db, rows.Select(x => x.InstanceId).ToList(), cancellationToken);
+
         var result = new List<EffectInstance>();
 
         foreach (var row in rows)
@@ -120,17 +122,9 @@ public sealed class PlayerLoader(ChidoDbContext db, EffectCatalog effects)
             // プレイヤーが戦闘に入れなくなるよりは軽い）
             if (definition is null) continue;
 
-            result.Add(new EffectInstance(
-                definition,
-                row.AffectReason,
-                row.GranterEntityId,
-                EffectScope.Player,
-                row.GrantSourceKey,
-                row.RemainingActions,
-                definition.StatusModifiers
-                    .Where(spec => spec.FixedRate is not null)
-                    .Select(spec => new StatusModifier(spec.TargetStatus, spec.FixedRate!.Value)),
-                instanceId: row.InstanceId));
+            result.Add(EffectInstanceRows.Rebuild(
+                definition, row.InstanceId, row.AffectReason, row.GranterEntityId,
+                EffectScope.Player, row.GrantSourceKey, row.RemainingActions, details));
         }
 
         return result;

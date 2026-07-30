@@ -1,4 +1,5 @@
 using Chido.Core;
+using Chido.Core.World;
 using Chido.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +40,23 @@ public sealed class ChannelStateRepository(ChidoDbContext db)
 
     public Task<ChannelStateRecord?> FindAsync(ulong channelId, CancellationToken cancellationToken = default)
         => db.ChannelStates.FirstOrDefaultAsync(x => x.ChannelId == channelId, cancellationToken);
+
+    /// <summary>
+    /// 出現の計画を反映する。累積敵レベル・フィールド・組・レアリティを一括で書き戻す。
+    ///
+    /// <b>4つは常に同時に動く。</b>レベルだけ進んで組が据え置かれる、といった中間状態は
+    /// 次の出現の計画（戦闘システム 10.3）から見て意味を持たないため、更新点を1つにしている。
+    /// </summary>
+    public async Task ApplyPlanAsync(
+        ulong channelId, SpawnPlan plan, CancellationToken cancellationToken = default)
+    {
+        var channel = await db.ChannelStates.FirstAsync(x => x.ChannelId == channelId, cancellationToken);
+
+        channel.CumulativeEnemyLevel = plan.CumulativeEnemyLevel;
+        channel.CurrentFieldKey = plan.FieldKey;
+        channel.CurrentGroupKey = plan.GroupKey;
+        channel.CurrentRarity = plan.Rarity;
+    }
 
     /// <summary>
     /// チャンネルの永続状態と、そこに出現中の敵の記録を削除する。

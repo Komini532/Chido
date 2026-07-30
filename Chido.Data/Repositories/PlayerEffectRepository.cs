@@ -60,6 +60,10 @@ public sealed class PlayerEffectRepository(ChidoDbContext db)
             GrantSourceKey = effect.GrantSourceKey,
             RemainingActions = remaining,
         });
+
+        // 不定値のステータス変動と SlipDamage のスナップショットはインスタンス側にしか存在しない。
+        // 書き漏らすと、復元のたびに補正が消える（マスタの固定変動だけが生き残る）
+        EffectInstanceRows.Write(db, effect);
     }
 
     /// <summary>
@@ -75,7 +79,7 @@ public sealed class PlayerEffectRepository(ChidoDbContext db)
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken);
 
-        var expired = 0;
+        var removed = new List<Guid>();
 
         foreach (var effect in effects)
         {
@@ -84,10 +88,12 @@ public sealed class PlayerEffectRepository(ChidoDbContext db)
             if (effect.RemainingActions != 0) continue;
 
             db.PlayerEffects.Remove(effect);
-            expired++;
+            removed.Add(effect.InstanceId);
         }
 
-        return expired;
+        await EffectInstanceRows.DeleteAsync(db, removed, cancellationToken);
+
+        return removed.Count;
     }
 
     /// <summary>
@@ -98,9 +104,16 @@ public sealed class PlayerEffectRepository(ChidoDbContext db)
     public async Task<int> DispelAsync(
         ulong userId, string effectKey, CancellationToken cancellationToken = default)
     {
+        var instanceIds = await db.PlayerEffects
+            .Where(x => x.UserId == userId && x.EffectKey == effectKey)
+            .Select(x => x.InstanceId)
+            .ToListAsync(cancellationToken);
+
         var deleted = await db.PlayerEffects
             .Where(x => x.UserId == userId && x.EffectKey == effectKey)
             .ExecuteDeleteAsync(cancellationToken);
+
+        await EffectInstanceRows.DeleteAsync(db, instanceIds, cancellationToken);
 
         // ExecuteDelete は変更追跡を経由しないため、消えた行が Unchanged のまま残る。
         // 解除直後に同じ effect_key を再付与する（「解除 → 付与」でリフレッシュを表現する）経路で

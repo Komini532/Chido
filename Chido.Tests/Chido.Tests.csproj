@@ -20,7 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 描画と対象解決は Discord のランタイムに依存しない純粋なロジックとして切り出してある -->
+    <!-- 描画・対象解決・戦闘オーケストレーションは Discord のランタイムに依存しない -->
     <ProjectReference Include="..\Chido\Chido.csproj" />
+    <!-- 実DBテストの足場（DatabaseFixture / DatabaseFact / 接続先の検証）を共有する。
+         テストの二重実行は起きない（xUnit の探索は対象アセンブリ内に閉じている） -->
+    <ProjectReference Include="..\Chido.Data.Tests\Chido.Data.Tests.csproj" />
   </ItemGroup>
 </Project>

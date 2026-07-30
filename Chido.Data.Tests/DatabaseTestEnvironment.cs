@@ -60,10 +60,17 @@ public static class DatabaseTestEnvironment
     /// テスト用DBとして安全に破棄・再作成できる接続文字列かを検証する。
     /// データベース名が <see cref="RequiredDatabaseSuffix"/> で終わらない場合は実行を拒否する。
     /// </summary>
-    public static string ResolveVerifiedConnectionString()
+    /// <param name="databaseSuffix">
+    /// データベース名に足す接尾辞。<b>テストアセンブリごとに別のDBを使うための指定である。</b>
+    /// フィクスチャは実行のたびに <c>EnsureDeleted</c> でデータベースごと破棄するため、
+    /// 2つのアセンブリが同じDBを指していると、片方が破棄している最中にもう片方が走りうる。
+    /// アセンブリ内の直列化（<c>DisableParallelization</c>）はアセンブリ間には効かないため、
+    /// 接続先そのものを分けて構造的に衝突しないようにする。
+    /// </param>
+    public static string ResolveVerifiedConnectionString(string? databaseSuffix = null)
     {
-        var connectionString = ResolveConnectionString();
-        var database = new MySqlConnectionStringBuilder(connectionString).Database;
+        var builder = new MySqlConnectionStringBuilder(ResolveConnectionString());
+        var database = builder.Database;
 
         if (!database.EndsWith(RequiredDatabaseSuffix, StringComparison.Ordinal))
         {
@@ -72,6 +79,11 @@ public static class DatabaseTestEnvironment
                 "実DBテストはスキーマを作り直すため、本番・開発用DBを指した状態では実行しない。");
         }
 
-        return connectionString;
+        if (databaseSuffix is { Length: > 0 })
+        {
+            builder.Database = database + databaseSuffix;
+        }
+
+        return builder.ConnectionString;
     }
 }

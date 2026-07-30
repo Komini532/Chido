@@ -1,31 +1,38 @@
+using Chido.Battle;
 using Discord;
 using Discord.WebSocket;
 
 namespace Chido.Commands;
 
 /// <summary>
-/// [Phase 9b で実装] スキルを発動します。
+/// 習得済みスキルの発動。
+///
+/// 通常攻撃と防御は習得管理の対象外であり、専用のコマンドから使う
+/// （<c>chido_player_skill</c> に行を持たないため、ここでは候補にも上がらない）。
 /// </summary>
-public sealed class SkillCommand : ISlashCommand
+public sealed class SkillCommand(BattleService battles, BattleQueries queries)
+    : BattleCommandBase(battles, queries)
 {
-    public const string OptionSkillName = "skill-name";
-    public const string OptionTarget = "target";
+    public const string OptionSkill = "skill-name";
 
-    public string Name => "skill";
+    public override string Name => "skill";
 
-    public string Description => "スキルを発動します。";
+    public override string Description => "習得しているスキルを使います。";
 
-    public SlashCommandBuilder Build()
-        => new SlashCommandBuilder()
-            .WithName(Name)
-            .WithDescription(Description)
-            .AddOption(OptionSkillName, ApplicationCommandOptionType.String, "発動するスキル名",
-                isRequired: true, isAutocomplete: true)
-            // [対象] はオートコンプリート付きの任意入力文字列（戦闘システム 9.2）。
-            // 固定の選択式にしないのは、同時に複数体出現しうる敵から柔軟に指定できるようにするため
-            .AddOption(OptionTarget, ApplicationCommandOptionType.String, "対象（省略可）",
-                isRequired: false, isAutocomplete: true);
+    protected override string Title => "スキル";
 
-    public Task ExecuteAsync(SocketSlashCommand command)
-        => command.RespondAsync("このコマンドはまだ実装されていません。", ephemeral: true);
+    public override SlashCommandBuilder Build()
+        => WithTarget(base.Build())
+            .AddOption(
+                OptionSkill, ApplicationCommandOptionType.String, "使用するスキル",
+                isRequired: true, isAutocomplete: true);
+
+    protected override BattleActionRequest BuildRequest(SocketSlashCommand command)
+        => NewRequest(command, BattleActionKind.Skill, skillKey: OptionOf(command, OptionSkill));
+
+    protected override async Task<IReadOnlyList<(string Label, string Value)>> ChoicesForAsync(
+        SocketAutocompleteInteraction interaction, string optionName, string input)
+        => optionName == OptionSkill
+            ? await Queries.SkillChoicesAsync(interaction.User.Id, input)
+            : [];
 }
