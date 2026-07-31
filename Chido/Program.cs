@@ -1,106 +1,68 @@
+using Chido;
+using Chido.Battle;
 using Chido.Commands;
 using Chido.Commands.Admin;
+using Chido.Data;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-var config = new DiscordSocketConfig
+var builder = Host.CreateApplicationBuilder(args);
+
+// DbContext はコマンドごとに独立したスコープで使う。Discord のイベントは並行して届き、
+// DbContext はスレッドセーフではないため、シングルトンで共有すると同時実行で壊れる。
+// ファクトリ経由にすることで、コマンド1回分の寿命を呼び出し側が明示的に区切れる
+builder.Services.AddDbContextFactory<ChidoDbContext>(options =>
+    options.UseMySql(
+        ChidoDbContextFactory.ResolveConnectionString(),
+        ChidoDbContextFactory.ServerVersion));
+
+builder.Services.AddSingleton(new DiscordSocketConfig
 {
     GatewayIntents = GatewayIntents.Guilds
                    | GatewayIntents.GuildMessages
-                   | GatewayIntents.MessageContent
-};
+                   | GatewayIntents.MessageContent,
+});
 
-var client = new DiscordSocketClient(config);
+builder.Services.AddSingleton<DiscordSocketClient>();
 
-var commandHandlers = new Dictionary<string, Func<SocketSlashCommand, Task>>
-{
-    [AttackCommand.Name] = AttackCommand.ExecuteAsync,
-    [EscapeCommand.Name] = EscapeCommand.ExecuteAsync,
-    [InventoryCommand.Name] = InventoryCommand.ExecuteAsync,
-    [SkillCommand.Name] = SkillCommand.ExecuteAsync,
-    [StatusCommand.Name] = StatusCommand.ExecuteAsync,
-    [UseCommand.Name] = UseCommand.ExecuteAsync,
-    [AdminDbMigrateCommand.Name] = AdminDbMigrateCommand.ExecuteAsync,
-    [AdminDbStatusCommand.Name] = AdminDbStatusCommand.ExecuteAsync,
-};
+// マスタは戦闘中に変化しないため、起動時に一括で読み込んで保持する。
+// 参照はチャンネル行ロック下で行われるため、都度クエリはそのままロック保持時間になる
+builder.Services.AddSingleton<GameCatalogs>();
+builder.Services.AddSingleton<BattleService>();
+builder.Services.AddSingleton<BattleQueries>();
+builder.Services.AddSingleton<PlayerProfileService>();
+builder.Services.AddSingleton<EquipmentService>();
+builder.Services.AddSingleton<ChannelCleanupService>();
 
-var slashCommands = new SlashCommandBuilder[]
-{
-    new SlashCommandBuilder()
-        .WithName(AttackCommand.Name)
-        .WithDescription(AttackCommand.Description),
-    new SlashCommandBuilder()
-        .WithName(EscapeCommand.Name)
-        .WithDescription(EscapeCommand.Description),
-    new SlashCommandBuilder()
-        .WithName(InventoryCommand.Name)
-        .WithDescription(InventoryCommand.Description),
-    new SlashCommandBuilder()
-        .WithName(SkillCommand.Name)
-        .WithDescription(SkillCommand.Description)
-        .AddOption(SkillCommand.OptionSkillName, ApplicationCommandOptionType.String, "発動するスキル名", isRequired: true),
-    new SlashCommandBuilder()
-        .WithName(StatusCommand.Name)
-        .WithDescription(StatusCommand.Description),
-    new SlashCommandBuilder()
-        .WithName(UseCommand.Name)
-        .WithDescription(UseCommand.Description)
-        .AddOption(UseCommand.OptionItemName, ApplicationCommandOptionType.String, "使用するアイテム名", isRequired: true),
-    // 実際の可否判定は AdminAuthorization の許可リストで行うが、
-    // 一般ユーザーのコマンド一覧に表示させないための多層防御としてDefaultMemberPermissionsも設定しておく
-    new SlashCommandBuilder()
-        .WithName(AdminDbMigrateCommand.Name)
-        .WithDescription(AdminDbMigrateCommand.Description)
-        .WithDefaultMemberPermissions(GuildPermission.Administrator),
-    new SlashCommandBuilder()
-        .WithName(AdminDbStatusCommand.Name)
-        .WithDescription(AdminDbStatusCommand.Description)
-        .WithDefaultMemberPermissions(GuildPermission.Administrator),
-};
+// コマンドは1つの登録点にまとめる。ここに足し忘れるとコマンドが存在しないのと同じになるため、
+// 登録・振り分け・スラッシュコマンドの定義がすべてこの列挙から導かれるようにしている
+builder.Services.AddSingleton<ISlashCommand, AttackCommand>();
+builder.Services.AddSingleton<ISlashCommand, SkillCommand>();
+builder.Services.AddSingleton<ISlashCommand, DefendCommand>();
+builder.Services.AddSingleton<ISlashCommand, EscapeCommand>();
+builder.Services.AddSingleton<ISlashCommand, UseCommand>();
+builder.Services.AddSingleton<ISlashCommand, TargetCommand>();
+builder.Services.AddSingleton<ISlashCommand, BattleInitCommand>();
+builder.Services.AddSingleton<ISlashCommand, StatusCommand>();
+builder.Services.AddSingleton<ISlashCommand, EquipCommand>();
+builder.Services.AddSingleton<ISlashCommand, InventoryCommand>();
+builder.Services.AddSingleton<ISlashCommand, AdminDbMigrateCommand>();
+builder.Services.AddSingleton<ISlashCommand, AdminDbStatusCommand>();
 
-client.Log += msg =>
-{
-    Console.WriteLine(msg.ToString());
-    return Task.CompletedTask;
-};
+builder.Services.AddHostedService<DiscordBotService>();
 
-client.Ready += async () =>
-{
-    Console.WriteLine($"Logged in as {client.CurrentUser.Username}#{client.CurrentUser.Discriminator}");
+// チャンネル消失のフェイルセーフ検証（C-1）。ChannelDestroyed イベントは
+// Bot の停止中や再接続の隙間に落ちうるため、取りこぼしを1時間以内に回収する
+builder.Services.AddHostedService<ChannelWatchdogService>();
 
-    var guildIdValue = Environment.GetEnvironmentVariable("DISCORD_GUILD_ID");
-    if (ulong.TryParse(guildIdValue, out var guildId))
-    {
-        var guild = client.GetGuild(guildId);
-        foreach (var builder in slashCommands)
-            await guild.CreateApplicationCommandAsync(builder.Build());
-        Console.WriteLine($"Registered {slashCommands.Length} guild slash commands for guild {guildId}.");
-    }
-    else
-    {
-        foreach (var builder in slashCommands)
-            await client.CreateGlobalApplicationCommandAsync(builder.Build());
-        Console.WriteLine($"Registered {slashCommands.Length} global slash commands.");
-    }
-};
+var host = builder.Build();
 
-client.SlashCommandExecuted += async command =>
-{
-    if (commandHandlers.TryGetValue(command.Data.Name, out var handler))
-        await handler(command);
-};
+// 起動時検証（戦闘システム 10.5）。草原フォールバックは DrawGroup と NextField の
+// 両方が依存しているため、欠けていると抽選のたびに例外へ落ちる。
+// 実行時の例外だけで守ると発覚がプレイヤーの行動時点まで遅れるため、ここで止める
+await host.Services.GetRequiredService<GameCatalogs>().ReloadAsync();
 
-client.MessageReceived += async msg =>
-{
-    if (msg.Author.IsBot) return;
-    if (msg.Content == "!ping")
-        await msg.Channel.SendMessageAsync("Pong!");
-};
-
-var token = Environment.GetEnvironmentVariable("DISCORD_TOKEN")
-    ?? throw new InvalidOperationException("Environment variable DISCORD_TOKEN is not set.");
-
-await client.LoginAsync(TokenType.Bot, token);
-await client.StartAsync();
-
-await Task.Delay(Timeout.Infinite);
+await host.RunAsync();

@@ -1,14 +1,31 @@
+using Chido.Battle;
+using Discord;
 using Discord.WebSocket;
 
 namespace Chido.Commands;
 
-public static class InventoryCommand
+/// <summary>所持アイテムを表示する。所持数が0のものは並べない。</summary>
+public sealed class InventoryCommand(PlayerProfileService profiles) : ISlashCommand
 {
-    public const string Name = "inventory";
-    public const string Description = "所持アイテムの一覧を表示します。";
+    public string Name => "inventory";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
+    public string Description => "所持アイテムを表示します。";
+
+    public async Task ExecuteAsync(SocketSlashCommand command)
     {
-        await command.RespondAsync("Command inventory is working!");
+        await command.DeferAsync();
+
+        var items = await profiles.InventoryAsync(
+            command.User.Id, command.User.GlobalName ?? command.User.Username);
+
+        var embed = new EmbedBuilder()
+            .WithTitle("所持アイテム")
+            .WithColor(Color.DarkBlue)
+            .WithDescription(items.Count == 0
+                ? "何も持っていません。"
+                : string.Join("\n", items.Select(x => $"{x.Name} ×{x.Quantity}")))
+            .Build();
+
+        await command.ModifyOriginalResponseAsync(m => m.Embed = embed);
     }
 }

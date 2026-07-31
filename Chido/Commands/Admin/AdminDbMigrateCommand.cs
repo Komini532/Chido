@@ -1,5 +1,6 @@
 using Chido.Administration;
 using Chido.Data;
+using Discord;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,12 +11,22 @@ namespace Chido.Commands.Admin;
 /// 初回実行時はテーブルの一括作成（InitialCreate含む全マイグレーション適用）を兼ね、
 /// 以降は設計変更に追随するための増分適用として使う。
 /// </summary>
-public static class AdminDbMigrateCommand
+public sealed class AdminDbMigrateCommand(IDbContextFactory<ChidoDbContext> dbFactory) : ISlashCommand
 {
-    public const string Name = "admin-db-migrate";
-    public const string Description = "[管理者専用] 未適用のDBマイグレーションを一括適用します（初回はテーブル一括作成を兼ねます）。";
+    public string Name => "admin-db-migrate";
 
-    public static async Task ExecuteAsync(SocketSlashCommand command)
+    public string Description =>
+        "[管理者専用] 未適用のDBマイグレーションを一括適用します（初回はテーブル一括作成を兼ねます）。";
+
+    // 実際の可否判定は AdminAuthorization の許可リストで行うが、
+    // 一般ユーザーのコマンド一覧に表示させないための多層防御として DefaultMemberPermissions も設定する
+    public SlashCommandBuilder Build()
+        => new SlashCommandBuilder()
+            .WithName(Name)
+            .WithDescription(Description)
+            .WithDefaultMemberPermissions(GuildPermission.Administrator);
+
+    public async Task ExecuteAsync(SocketSlashCommand command)
     {
         if (!AdminAuthorization.IsAuthorized(command.User.Id))
         {
@@ -26,7 +37,7 @@ public static class AdminDbMigrateCommand
         // Discordの3秒応答制限に対応するため、重い処理の前に先にDeferする
         await command.DeferAsync(ephemeral: true);
 
-        await using var db = ChidoDbContextFactory.CreateDbContext();
+        await using var db = await dbFactory.CreateDbContextAsync();
 
         try
         {

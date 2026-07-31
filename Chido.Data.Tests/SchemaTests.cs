@@ -488,6 +488,11 @@ public class SchemaTests
         // 3番の last_action_at は Timeout 廃止により用途が消失したため削除した
         Assert.DoesNotContain(Table("chido_battle_session").GetProperties(),
             p => p.GetColumnName() == "last_action_at");
+
+        // 3番の message_id も同様。1行動につき1つの新規メッセージを送る方式に変わり、
+        // 編集し続ける単一の進捗メッセージが存在しなくなったため読む経路が無い
+        Assert.DoesNotContain(Table("chido_battle_session").GetProperties(),
+            p => p.GetColumnName() == "message_id");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using Chido.Core;
+using Chido.Core.World;
 using Chido.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,6 +42,23 @@ public sealed class ChannelStateRepository(ChidoDbContext db)
         => db.ChannelStates.FirstOrDefaultAsync(x => x.ChannelId == channelId, cancellationToken);
 
     /// <summary>
+    /// 出現の計画を反映する。累積敵レベル・フィールド・組・レアリティを一括で書き戻す。
+    ///
+    /// <b>4つは常に同時に動く。</b>レベルだけ進んで組が据え置かれる、といった中間状態は
+    /// 次の出現の計画（戦闘システム 10.3）から見て意味を持たないため、更新点を1つにしている。
+    /// </summary>
+    public async Task ApplyPlanAsync(
+        ulong channelId, SpawnPlan plan, CancellationToken cancellationToken = default)
+    {
+        var channel = await db.ChannelStates.FirstAsync(x => x.ChannelId == channelId, cancellationToken);
+
+        channel.CumulativeEnemyLevel = plan.CumulativeEnemyLevel;
+        channel.CurrentFieldKey = plan.FieldKey;
+        channel.CurrentGroupKey = plan.GroupKey;
+        channel.CurrentRarity = plan.Rarity;
+    }
+
+    /// <summary>
     /// チャンネルの永続状態と、そこに出現中の敵の記録を削除する。
     ///
     /// <c>ChannelMissing</c> によるセッション終了時に呼ぶ。Discordのチャンネルは復活せず
@@ -56,5 +74,19 @@ public sealed class ChannelStateRepository(ChidoDbContext db)
         await db.ChannelStates
             .Where(x => x.ChannelId == channelId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        // ExecuteDelete は変更追跡を経由しないため、削除済みの行が Unchanged のまま残る。
+        // 残したまま続けて SaveChanges が走ると、消えた行に対する UPDATE が
+        // 「0行更新」として同時実行の衝突に見える
+        Detach<ChannelCurrentEnemyRecord>(db, x => x.ChannelId == channelId);
+        Detach<ChannelStateRecord>(db, x => x.ChannelId == channelId);
+    }
+
+    private static void Detach<T>(ChidoDbContext db, Func<T, bool> match) where T : class
+    {
+        foreach (var entry in db.ChangeTracker.Entries<T>().Where(e => match(e.Entity)).ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
     }
 }

@@ -332,8 +332,8 @@ CREATE TABLE chido_battle_session (
     session_id     BINARY(16)       NOT NULL PRIMARY KEY, -- 使い捨てGuid。プレイヤーの最初の戦闘行為時に新規発行される
     guild_id       BIGINT UNSIGNED  NOT NULL,             -- 戦闘が発生したDiscordサーバーID
     channel_id     BIGINT UNSIGNED  NOT NULL,             -- 戦闘が発生したチャンネルID。chido_channel_state.channel_id を参照
-    message_id     BIGINT UNSIGNED  NULL,                 -- 戦闘状況を表示している埋め込みメッセージのID（編集対象）
-    last_action_at DATETIME(3)      NOT NULL,             -- 最終行動時刻。Timeoutによる強制終了は廃止されたため現状は参照されない（未確定事項 I-4 参照）
+                                                          -- message_id は持たない（下記）
+                                                          -- last_action_at は持たない（下記）
     created_at     DATETIME(3)      NOT NULL,             -- セッション開始時刻
     ended_at       DATETIME(3)      NULL,                 -- 終了時刻。NULL=進行中、NOT NULL=終了（phase列の代わりにこれで進行状態を表現する）
     end_reason     TINYINT UNSIGNED NULL                  -- 終了理由。ended_atがNULLの間は常にNULL。BattleEndReason:
@@ -343,6 +343,10 @@ CREATE TABLE chido_battle_session (
                                                           --   3: ChannelMissing チャンネル消失により継続不可能になった
 );
 ```
+
+**`last_action_at` を持たない（I-4・決定事項）**: 非同期設計では長時間放置そのものが許容されており、放置を理由にセッションを終了させる処理は今後も入らない（終了条件はチャンネルの存否）。全行動で更新が必要なのに誰も読まない `NOT NULL` 列は書き込みコストだけが残り、将来「時間で切る」実装を呼び込む余地にもなる。セッションの経過時間は `created_at`、最終活動時刻が必要になれば `chido_battle_log.created_at` の最大値で得られる。
+
+**`message_id` を持たない（B-3・B-4・決定事項）**: 戦闘進捗は「1つの埋め込みメッセージを編集して表示する」方式を採らない。**1回の戦闘行動につき1つの新規メッセージを送り、行動レスポンスと進捗表示を同一メッセージへ集約する**（戦闘システム 3.1 参照）。編集し続ける単一の進捗メッセージが存在しないため、指し示す対象がそもそも無く、この列を読む経路も無い。`last_action_at` と同じく「全行動で更新しながら誰も読まない列」になるため置かない。
 
 終了理由はトリガー発火時点で明示的に記録する。`chido_battle_participant.status`の分布からは、`PlayerEscaped`と`EnemyEscaped`（および`PlayerVictory`）を事後的に区別できないため（例: 敵が2体おり、1体が逃走・1体が撃破された場合）。
 
@@ -1278,11 +1282,19 @@ CREATE TABLE chido_channel_state (
     cumulative_enemy_level VARCHAR(100)           NOT NULL,             -- 累積敵レベル。初期値 1。敵の組を撃破するたびに +1（減少しない）。10進整数文字列。
                                                                         -- 出現する敵の level にそのまま複製される。
                                                                         -- この値が 2500 の倍数に達するたびにフィールドが切り替わる（専用カウンターは持たない）
-    current_session_id     BINARY(16)             NULL                  -- chido_battle_session.session_id を参照。NULL=進行中のセッションなし。
+    current_session_id     BINARY(16)             NULL,                 -- chido_battle_session.session_id を参照。NULL=進行中のセッションなし。
                                                                         -- 1チャンネル1行という構造により「アクティブなセッションは1つ以下」が導かれ、
                                                                         -- セッション生成レースを本行のロックで直列化できる
+    current_group_key      VARCHAR(64)            NULL,                 -- chido_enemy_group_master.group_key を参照。現在出現中の組。NULL=未抽選（初期化直後）
+    current_rarity         TINYINT UNSIGNED       NULL                  -- 現在出現中の組のレアリティ。NULL=未抽選（初期化直後）
 );
 ```
+
+**現在出現中の組を記録する理由（第5次改訂）**: 戦闘システム 10.3 の次の出現の計画は、`PlayerEscaped` のときに直前の組のレアリティで分岐し、`Common`/`Uncommon` であれば**同一の `group_key` を再出現させる**。したがって「直前に何が出ていたか」を知らなければ計画そのものが立たない。
+
+どちらも**出現中の敵からは逆引きできない**。`chido_channel_current_enemy` から辿れるのは `chido_battle_enemy.master_key`（メンバーの種族キー）であり、同じメンバー構成の組が複数あれば組は一意に定まらない。レアリティも `chido_field_enemy_group_master` は「(フィールド, レアリティ) → 組」の対応であり、同じ組が複数のフィールド・レアリティに登録されうるため逆引きは一意にならない。
+
+Phase 9b の実装時に、戦闘システムドキュメントが要求する値をDB設計側が保持していないことが判明したため、**戦闘ロジックの正は戦闘システムドキュメント**という優先順位に従い本表に2列を追加した（マイグレーション `AddChannelCurrentGroup`）。
 
 行は戦闘チャンネル初期化コマンドの実行時に`INSERT`される。PK重複により再実行は失敗し、これが冪等性を担保する（初期化は「既にあるものを消去して作り直す」機能を伴わない）。
 
@@ -1492,7 +1504,7 @@ CREATE TABLE chido_effect_element_grant_master (
 | **G-1** | 参加者ごとの累積与ダメージの保持場所。`chido_battle_log.payload`(JSON)からの集計とするか、`chido_battle_participant`に専用列（例: `total_damage_dealt VARCHAR(100)`）を持たせるか。**実装は既に専用列（`chido_battle_participant.total_damage_dealt VARCHAR(100)`）を持っており、後者に倒れている。** 本項目を正式に解消とするかは戦闘システム側の判断待ち | 戦闘システム 6.2 で確定した経験値按分式の入力。4番の列構成 |
 | **H-3** | `chido_effect_element_grant_instance`の要否。インスタンス側が可変値を持たないのであれば、`chido_effect_disable_move_master`と同じくマスタのみで完結する | 新規テーブルの要否 |
 | **I-3** | `chido_battle_log`のログ粒度。1行=1ターンか、1行=1モーションか（1スキルが複数モーションを持つため） | G-1の解決方法によっては先に決める必要がある |
-| **I-4** | `chido_battle_session.last_action_at`の存否。`Timeout`廃止により用途が消失している | 列の削除、または用途の再定義 |
+| ~~**I-4**~~ | **解消**。`last_action_at` は列ごと削除した。あわせて `message_id` も削除している（戦闘システム B-3・B-4 により、編集し続ける単一の進捗メッセージが存在しなくなったため）。3番のDDLと注記を参照 |
 
 **解消した推奨項目（第3次改訂）**
 

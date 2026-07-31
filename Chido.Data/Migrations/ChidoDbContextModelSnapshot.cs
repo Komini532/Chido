@@ -323,11 +323,6 @@ namespace Chido.Data.Migrations
                         .HasColumnName("guild_id")
                         .HasComment("戦闘が発生したDiscordサーバーID");
 
-                    b.Property<ulong?>("MessageId")
-                        .HasColumnType("bigint unsigned")
-                        .HasColumnName("message_id")
-                        .HasComment("戦闘状況を表示している埋め込みメッセージのID（編集対象）");
-
                     b.HasKey("SessionId");
 
                     b.ToTable("chido_battle_session", (string)null);
@@ -405,6 +400,16 @@ namespace Chido.Data.Migrations
                         .HasColumnType("VARCHAR(64)")
                         .HasColumnName("current_field_key")
                         .HasComment("chido_field_master.field_key を参照。現在のフィールド");
+
+                    b.Property<string>("CurrentGroupKey")
+                        .HasColumnType("VARCHAR(64)")
+                        .HasColumnName("current_group_key")
+                        .HasComment("chido_enemy_group_master.group_key を参照。現在出現中の組。NULL=未抽選（初期化直後）。PlayerEscaped かつ前組が Common/Uncommon の場合は同一の group_key が再出現するため、次の出現の計画に必須（戦闘システム 10.3）。出現中の敵の集合からは逆引きできない");
+
+                    b.Property<byte?>("CurrentRarity")
+                        .HasColumnType("TINYINT UNSIGNED")
+                        .HasColumnName("current_rarity")
+                        .HasComment("現在出現中の組のレアリティ。NULL=未抽選（初期化直後）。PlayerEscaped のレアリティ分岐（Rare 以上から降りたら Common へ落とす）と撃破報酬の根拠。chido_field_enemy_group_master からは同じ組が複数のフィールド・レアリティに登録されうるため逆引きできない");
 
                     b.Property<byte[]>("CurrentSessionId")
                         .HasColumnType("BINARY(16)")

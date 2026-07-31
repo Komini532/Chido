@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- 描画・対象解決の検証を目的とするテストプロジェクトであり、NuGetパッケージとして発行しない -->
+    <!-- net8.0 の実行時ランタイムが無い環境でも testhost がより新しいランタイムへ
+         ロールフォワードして起動できるようにする（他のテストプロジェクトと同じ設定） -->
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 描画・対象解決・戦闘オーケストレーションは Discord のランタイムに依存しない -->
+    <ProjectReference Include="..\Chido\Chido.csproj" />
+    <!-- 実DBテストの足場（DatabaseFixture / DatabaseFact / 接続先の検証）を共有する。
+         テストの二重実行は起きない（xUnit の探索は対象アセンブリ内に閉じている） -->
+    <ProjectReference Include="..\Chido.Data.Tests\Chido.Data.Tests.csproj" />
+  </ItemGroup>
+</Project>

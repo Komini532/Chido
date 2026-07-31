@@ -11,7 +11,10 @@ public class BattleSession
     public Guid   Id        { get; private set; } = Guid.NewGuid();
     public ulong  GuildId   { get; private set; }
     public ulong  ChannelId { get; private set; }
-    public ulong  MessageId { get; set; } // バトル進捗メッセージ (編集用)
+
+    // 進捗メッセージのIDは持たない。1回の戦闘行動につき1つの新規メッセージを送る方式であり
+    // （行動レスポンスと進捗表示を同一メッセージへ集約する）、編集し続ける単一の進捗メッセージが
+    // 存在しないため、指し示す対象がそもそも無い。
 
     public List<BattleLogEntry> Log { get; } = [];
     public DateTimeOffset  LastActionAt { get; private set; } = DateTimeOffset.UtcNow;

@@ -16,15 +16,24 @@ namespace Chido.Data.Tests;
 /// 初回呼び出しまで遅延させている（xUnit のフィクスチャ構築はテストのスキップ判定と独立に走る）。
 /// </para>
 /// </summary>
-public sealed class DatabaseFixture
+public class DatabaseFixture
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private bool prepared;
 
+    /// <summary>
+    /// データベース名に足す接尾辞。<b>テストアセンブリごとに別のDBを使うための指定である。</b>
+    /// 本フィクスチャは実行のたびにデータベースごと破棄するため、2つのアセンブリが同じDBを
+    /// 指していると、片方が破棄している最中にもう片方が走りうる。アセンブリ内の直列化は
+    /// アセンブリ間には効かないため、接続先そのものを分けている。
+    /// </summary>
+    protected virtual string? DatabaseSuffix => null;
+
     /// <summary>スキーマ準備済みのDBに接続した DbContext を返す。</summary>
     public async Task<ChidoDbContext> CreateContextAsync()
     {
-        var connectionString = DatabaseTestEnvironment.ResolveVerifiedConnectionString();
+        var connectionString =
+            DatabaseTestEnvironment.ResolveVerifiedConnectionString(DatabaseSuffix);
 
         await EnsurePreparedAsync(connectionString);
 

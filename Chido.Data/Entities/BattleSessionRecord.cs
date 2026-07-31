@@ -17,8 +17,9 @@ public class BattleSessionRecord
     /// <summary>戦闘が発生したチャンネルID。</summary>
     public ulong ChannelId { get; set; }
 
-    /// <summary>戦闘状況を表示している埋め込みメッセージのID（編集対象）。</summary>
-    public ulong? MessageId { get; set; }
+    // message_id は持たない。1行動につき1つの新規メッセージを送る方式であり、編集し続ける
+    // 単一の進捗メッセージが存在しないため、この列を読む経路が無い。全行動で更新しながら
+    // 誰も読まない列になるという点で last_action_at と同じ形になる。
 
     // last_action_at は持たない。Timeout による強制終了が廃止され（戦闘システム 6.1）、
     // 非同期設計では長時間放置そのものが許容されるため、読み出す箇所が存在しない。
