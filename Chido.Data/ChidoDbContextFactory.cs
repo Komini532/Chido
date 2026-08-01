@@ -27,13 +27,16 @@ public static class ChidoDbContextFactory
     /// 理由: <c>dotnet ef migrations add</c> をWindows開発機で実行する際、
     /// 本番MySQLサーバーへ常に到達できるとは限らないため（AutoDetectは実接続が必須）。
     ///
-    /// 8.4 は 8.0 系（2026-04-30 にEOL）の後継となるLTS。実サーバーを移行したら、
-    /// メジャー/マイナー（8.4 の部分）を実サーバーに合わせて調整すること。
+    /// 9.7 は 8.4 の次のLTS系列。LTS から LTS への移行は上位側が対応する経路であり、
+    /// LTS系列を飛ばす移行（8.0 → 9.7 のような）は対象外であることに注意する。
+    /// 実サーバーを移行したら、メジャー/マイナー（9.7 の部分）を実サーバーに合わせて調整すること。
     /// パッチ番号は実サーバーに追随させず、そのLTS系列の下限である 0 に固定する。
-    /// Pomelo が機能の可否を切り替える閾値は 8.0.31 が最大で 8.4 系の中には無いため、
+    /// Pomelo が機能の可否を切り替える閾値は 8.0.31 が最大で 8.4〜9.7 の区間には無いため、
     /// 下限を指定しておけば実サーバーに存在しない機能を前提にする事故が起きない。
+    /// この区間に閾値が無いということは、8.4 から上げても<b>生成されるDDLが変わらない</b>
+    /// ことも意味する（マイグレーションの再生成は不要）。
     /// </summary>
-    public static readonly MySqlServerVersion ServerVersion = new(new Version(8, 4, 0));
+    public static readonly MySqlServerVersion ServerVersion = new(new Version(9, 7, 0));
 
     public static ChidoDbContext CreateDbContext(string? connectionStringOverride = null)
     {

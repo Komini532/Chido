@@ -9,7 +9,7 @@ using Xunit;
 namespace Chido.Data.Tests;
 
 /// <summary>
-/// 実DB（MySQL 8.4）に対する検証。<see cref="SchemaTests"/> / <see cref="RankingQueryTests"/> が
+/// 実DB（MySQL 9.7）に対する検証。<see cref="SchemaTests"/> / <see cref="RankingQueryTests"/> が
 /// EF Core のモデルと生成SQLの側から固定している内容のうち、<b>DBに投げて初めて分かる部分</b>だけを扱う。
 ///
 /// <para>
