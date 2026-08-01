@@ -10,6 +10,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <!-- adminコマンドからDatabase.MigrateAsync()等を呼ぶため、実行時にもPomeloが必要 -->
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
+    <!-- MySQL 9.x 対応のため Chido.Data と同じバージョンを明示する（理由は Chido.Data.csproj 参照） -->
+    <PackageReference Include="MySqlConnector" Version="2.6.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Chido.Core\Chido.Core.csproj" />

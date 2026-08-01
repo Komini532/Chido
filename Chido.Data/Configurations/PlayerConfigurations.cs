@@ -51,7 +51,7 @@ public class BattleStatusConfiguration : IEntityTypeConfiguration<BattleStatusRe
             .HasComputedColumnSql("CHAR_LENGTH(`exp`)", stored: true)
             .HasComment("exp の桁数。非負の正準10進文字列では (桁数, 辞書順) が数値順に一致するため、ランキングの第1ソートキーになる。DBが算出する生成列");
 
-        // 昇順のまま張る。MySQL 8 は ORDER BY exp_len DESC, exp DESC のような全反転を昇順インデックスの逆走査で処理できる
+        // 昇順のまま張る。MySQL 8 以降は ORDER BY exp_len DESC, exp DESC のような全反転を昇順インデックスの逆走査で処理できる
         e.HasIndex(x => new { x.ExpLength, x.Exp }).HasDatabaseName("idx_exp_rank");
     }
 }

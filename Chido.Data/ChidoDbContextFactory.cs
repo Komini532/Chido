@@ -27,13 +27,19 @@ public static class ChidoDbContextFactory
     /// 理由: <c>dotnet ef migrations add</c> をWindows開発機で実行する際、
     /// 本番MySQLサーバーへ常に到達できるとは限らないため（AutoDetectは実接続が必須）。
     ///
-    /// 8.4 は 8.0 系（2026-04-30 にEOL）の後継となるLTS。実サーバーを移行したら、
-    /// メジャー/マイナー（8.4 の部分）を実サーバーに合わせて調整すること。
+    /// 9.7 は 8.4 の次のLTS（8.0 系は 2026-04-30 にEOL）。実サーバーを移行したら、
+    /// メジャー/マイナー（9.7 の部分）を実サーバーに合わせて調整すること。
     /// パッチ番号は実サーバーに追随させず、そのLTS系列の下限である 0 に固定する。
-    /// Pomelo が機能の可否を切り替える閾値は 8.0.31 が最大で 8.4 系の中には無いため、
+    /// Pomelo が機能の可否を切り替える閾値は 8.0.31 が最大でそれより上には無いため、
     /// 下限を指定しておけば実サーバーに存在しない機能を前提にする事故が起きない。
+    ///
+    /// なお Pomelo 8.0.2 が公式にテストしている対象は MySQL 8.4 / 8.0 までで、
+    /// 9.x は対象外（tracking issue: PomeloFoundation/Pomelo.EntityFrameworkCore.MySql#2022）。
+    /// 上記のとおり閾値が 8.0.31 止まりなので Pomelo が組み立てるSQLは 8.4 向けと同一であり、
+    /// 実DBテスト（Chido.Data.Tests の DatabaseFact）で 9.7 に対する動作を担保している。
+    /// Pomelo を上げる際は、この前提が崩れていないかを実DBに対して取り直すこと。
     /// </summary>
-    public static readonly MySqlServerVersion ServerVersion = new(new Version(8, 4, 0));
+    public static readonly MySqlServerVersion ServerVersion = new(new Version(9, 7, 0));
 
     public static ChidoDbContext CreateDbContext(string? connectionStringOverride = null)
     {

@@ -14,6 +14,11 @@
          この不具合はモデルの確定処理そのものを落とすため、マイグレーション生成も実行時のDB接続もできない。
          Design パッケージも同じバージョンに揃え、Chido側との参照バージョン不一致(CS1705)を防ぐ -->
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
+    <!-- Pomelo 8.0.2 の依存は MySqlConnector 2.3.5（下限のみ）で、これは MySQL 9.0 の
+         リリースより前に出たバージョンにあたる。実際にサーバーとプロトコルを喋るのは
+         この層なので、MySQL 9.x を明示サポートし 9.7 を回帰テスト対象にしている
+         系列まで明示的に引き上げる。Pomelo 側に上限指定は無いため差し替えられる -->
+    <PackageReference Include="MySqlConnector" Version="2.6.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
       <PrivateAssets>all</PrivateAssets>
