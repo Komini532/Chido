@@ -9,7 +9,7 @@
 
 - 開発OS: Windows 11
 - 言語/フレームワーク: C# / .NET 8
-- データベース: MySQL 8.4 LTS（8.0 系は 2026-04-30 にEOL）
+- データベース: MySQL 9.7 LTS（8.0 系は 2026-04-30 にEOL。8.4 の次のLTSにあたる）
 - 開発ツール: Claude Code
 - ホスティングサーバー: Ubuntu 24.04 LTS
 - リポジトリ: https://github.com/Komini532/Chido/
@@ -158,7 +158,7 @@ INDEX idx_exp_rank (exp_len, exp)
 -- ORDER BY exp_len DESC, exp DESC  →  数値降順
 ```
 
-インデックスは昇順のまま張る。MySQL 8は全反転（`DESC, DESC`）を昇順インデックスの逆走査で処理するため、`filesort`は発生しない（実測: `Backward index scan; Using index`）。照合順序を`ascii_bin`にするのは、照合順序に依存せず必ずバイト順で比較させるためと、インデックスを1バイト/文字に抑えるため。
+インデックスは昇順のまま張る。MySQL 8以降は全反転（`DESC, DESC`）を昇順インデックスの逆走査で処理するため、`filesort`は発生しない（実測: `Backward index scan; Using index`）。照合順序を`ascii_bin`にするのは、照合順序に依存せず必ずバイト順で比較させるためと、インデックスを1バイト/文字に抑えるため。
 
 対象は**実際にSQL側のソートが必要な2列のみ**とする。
 

@@ -35,34 +35,39 @@ dotnet ef migrations script --project Chido.Data --startup-project Chido.Data -o
   手で削除してから作り直す。
 - net8.0 のランタイムが無い環境（新しい SDK のみが入っている場合）では、
   `DOTNET_ROLL_FORWARD=LatestMajor` を設定すると `dotnet-ef` が起動できる。
-- **MySQL 8.4 では `mysql_native_password` プラグインが削除されている。** 接続ユーザーの
+- **MySQL 8.4 以降では `mysql_native_password` プラグインが削除されている。** 接続ユーザーの
   認証方式は `caching_sha2_password`（8.0 以降のデフォルト）である必要がある。
   MySqlConnector 側は対応済みのため接続文字列に変更は要らないが、8.0 から引き継いだ
   ユーザーが `mysql_native_password` の場合は接続できない。その場合は
   `ALTER USER 'chido'@'%' IDENTIFIED WITH caching_sha2_password BY '<password>';` で切り替える。
+- **`EXPLAIN` は `FORMAT=TRADITIONAL` を明示する。** MySQL 9.x で `explain_format` の既定値が
+  `TRADITIONAL` から `TREE` に変わったため、修飾なしの `EXPLAIN` は `key` / `Extra` を持たない
+  1列のツリー表現を返す。実行計画を目視・機械判定する箇所では常に明示すること
+  （`DatabaseSchemaTests.ExplainAsync` はそうしている）。
 
 ## 実DBに対する適用の確認
 
-MySQL 8.4.11（`STRICT_TRANS_TABLES`）に対して適用を確認済み。全49テーブルの作成、
+MySQL 9.7.2（`STRICT_TRANS_TABLES`）に対して適用を確認済み。全49テーブルの作成、
 `exp_len` / `amount_len` のストアド生成列、およびランキング用インデックスの逆走査
 （`Backward index scan; Using index`。`filesort` なし）まで含めて動作する。
-以前は 8.0.46 で確認していたが、8.0 系が 2026-04-30 にEOLとなったため 8.4 LTS で取り直した。
-`ChidoDbContextFactory` の `MySqlServerVersion` を 8.0.36 から 8.4.0 に上げても、
-EF Core が生成する DDL は1バイトも変わらない（Pomelo が機能の可否を切り替える閾値が
-その区間に存在しないため）。マイグレーションの再生成は不要。
+
+`ChidoDbContextFactory` の `ServerVersion` を 8.4.0 から 9.7.0 に上げても、
+EF Core が生成する DDL は1バイトも変わらない（Pomelo が機能の可否を切り替える閾値は
+8.0.31 が最大で、それより上に存在しないため）。マイグレーションの再生成は不要。
 
 ```bash
 docker run -d --name chido-mysql -e MYSQL_ROOT_PASSWORD=chido -e MYSQL_DATABASE=chido \
-  -p 13306:3306 mysql:8.4 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+  -p 13306:3306 mysql:9.7 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
 
 export CHIDO_MYSQL_CONNECTION="Server=127.0.0.1;Port=13306;Database=chido;User=root;Password=chido;"
 dotnet ef database update --project Chido.Data --startup-project Chido.Data
 ```
 
-逆走査が効いているかは次で確認する。
+逆走査が効いているかは次で確認する（`FORMAT=TRADITIONAL` の明示が要る理由は「注意点」を参照）。
 
 ```sql
-EXPLAIN SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC LIMIT 10;
+EXPLAIN FORMAT=TRADITIONAL
+SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC LIMIT 10;
 -- Extra: Backward index scan; Using index （"Using filesort" が出ないこと）
 ```
 
@@ -70,13 +75,13 @@ EXPLAIN SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC 
 
 上記の確認は `Chido.Data.Tests` の `DatabaseSchemaTests` が自動化している
 （DDLの適用・全49テーブルの作成・生成列の算出・ランキングの数値順・逆走査の `EXPLAIN`）。
-CI（`.github/workflows/build.yml`）は MySQL 8.4 のサービスコンテナを立てて毎回これを走らせる。
+CI（`.github/workflows/build.yml`）は MySQL 9.7 のサービスコンテナを立てて毎回これを走らせる。
 
 手元で走らせる場合は、テスト専用のDBを立てて `CHIDO_TEST_MYSQL_CONNECTION` を設定する。
 
 ```bash
 docker run -d --name chido-mysql-test -e MYSQL_ROOT_PASSWORD=chido -e MYSQL_DATABASE=chido_test \
-  -p 13306:3306 mysql:8.4 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+  -p 13306:3306 mysql:9.7 --sql-mode="STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
 
 export CHIDO_TEST_MYSQL_CONNECTION="Server=127.0.0.1;Port=13306;Database=chido_test;User=root;Password=chido;"
 dotnet test Chido.Data.Tests

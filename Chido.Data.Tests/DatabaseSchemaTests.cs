@@ -9,7 +9,7 @@ using Xunit;
 namespace Chido.Data.Tests;
 
 /// <summary>
-/// 実DB（MySQL 8.4）に対する検証。<see cref="SchemaTests"/> / <see cref="RankingQueryTests"/> が
+/// 実DB（MySQL 9.7）に対する検証。<see cref="SchemaTests"/> / <see cref="RankingQueryTests"/> が
 /// EF Core のモデルと生成SQLの側から固定している内容のうち、<b>DBに投げて初めて分かる部分</b>だけを扱う。
 ///
 /// <para>
@@ -213,13 +213,22 @@ public class DatabaseSchemaTests
         return connection;
     }
 
-    /// <summary>EXPLAIN の key 列と Extra 列を読む。</summary>
+    /// <summary>
+    /// EXPLAIN の key 列と Extra 列を読む。
+    ///
+    /// <para>
+    /// <c>FORMAT=TRADITIONAL</c> は必須。MySQL 9.x で <c>explain_format</c> の既定値が
+    /// <c>TRADITIONAL</c> から <c>TREE</c> に変わり、修飾なしの <c>EXPLAIN</c> は
+    /// key / Extra を持たない1列のツリー表現を返すようになった。明示しておけば
+    /// サーバー側の既定値に関係なく同じ形が返る（この構文は MySQL 8.0.32 以降）。
+    /// </para>
+    /// </summary>
     private static async Task<(string Key, string Extra)> ExplainAsync(ChidoDbContext db, string sql)
     {
         var connection = await OpenConnectionAsync(db);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "EXPLAIN " + sql;
+        command.CommandText = "EXPLAIN FORMAT=TRADITIONAL " + sql;
 
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync(), "EXPLAIN が行を返さなかった");

@@ -366,7 +366,7 @@ public class SchemaTests
     public void ランキング用の複合インデックスが定義されている(
         string table, string indexName, string first, string second)
     {
-        // 昇順のまま張る。MySQL 8 は ORDER BY exp_len DESC, exp DESC のような全反転を
+        // 昇順のまま張る。MySQL 8 以降は ORDER BY exp_len DESC, exp DESC のような全反転を
         // 昇順インデックスの逆走査（Backward index scan）で処理でき、filesort が出ない
         var index = Table(table).GetIndexes().Single(i => i.GetDatabaseName() == indexName);
 
