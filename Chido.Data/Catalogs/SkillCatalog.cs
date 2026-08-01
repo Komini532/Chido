@@ -61,9 +61,9 @@ public sealed class SkillCatalog
             .GroupBy(x => x.EnemyKey)
             .ToDictionary(
                 g => g.Key,
-                // 登録順（skill_key）がローテーションの順序になる。マスタ側に順序列が無いため、
-                // 決定的な順序として可読キーの昇順を採る
-                g => g.OrderBy(x => x.SkillKey, StringComparer.Ordinal)
+                // enemy_skill_index が登録順を持ち、そのままローテーションの順序になる。
+                // ローテーションの法 total はこの件数であり、順序に意味があるため列の指定に従う
+                g => g.OrderBy(x => x.EnemySkillIndex)
                     .Where(x => skills.ContainsKey(x.SkillKey))
                     .Select(x => new EnemySkillEntry(skills[x.SkillKey], x.Weight))
                     .ToList());

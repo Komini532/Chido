@@ -213,13 +213,21 @@ public class DatabaseSchemaTests
         return connection;
     }
 
-    /// <summary>EXPLAIN の key 列と Extra 列を読む。</summary>
+    /// <summary>
+    /// EXPLAIN の key 列と Extra 列を読む。
+    ///
+    /// <para>
+    /// <b>出力形式を明示する。</b>既定の形式はサーバー変数（<c>explain_format</c>）に従うため、
+    /// 何も指定しないと列名が環境によって変わる。表形式の列名（<c>key</c> / <c>Extra</c>）を
+    /// 前提にしている以上、ここで固定しなければサーバーの設定次第で読めなくなる。
+    /// </para>
+    /// </summary>
     private static async Task<(string Key, string Extra)> ExplainAsync(ChidoDbContext db, string sql)
     {
         var connection = await OpenConnectionAsync(db);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "EXPLAIN " + sql;
+        command.CommandText = "EXPLAIN FORMAT=TRADITIONAL " + sql;
 
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync(), "EXPLAIN が行を返さなかった");

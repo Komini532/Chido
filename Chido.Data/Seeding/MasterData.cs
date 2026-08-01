@@ -195,12 +195,13 @@ public static class MasterData
     public static IReadOnlyList<EnemySkillsMasterRecord> EnemySkills =>
     [
         // 重み付き。weight = 0 は本パターンでのみ「抽選対象外」を意味する
-        EnemySkill(BatKey, GameConstants.AttackSkillKey, 70),
-        EnemySkill(BatKey, "poison_bite", 30),
+        EnemySkill(BatKey, 0, GameConstants.AttackSkillKey, 70),
+        EnemySkill(BatKey, 1, "poison_bite", 30),
 
-        // ローテーション。登録順（skill_key の昇順）がそのまま順序になる
-        EnemySkill(WolfKey, GameConstants.AttackSkillKey, 1),
-        EnemySkill(WolfKey, "howl", 1),
+        // ローテーション。enemy_skill_index の昇順がそのまま順序になる。
+        // 登録された通常攻撃はローテ枠を1つ占める（フォールバックの通常攻撃とは別物）
+        EnemySkill(WolfKey, 0, "howl", 1),
+        EnemySkill(WolfKey, 1, GameConstants.AttackSkillKey, 1),
     ];
 
     /// <summary>
@@ -509,8 +510,12 @@ public static class MasterData
     private static FieldEnemyGroupMasterRecord FieldGroup(string fieldKey, Rarity rarity, string groupKey)
         => new() { FieldKey = fieldKey, Rarity = rarity, GroupKey = groupKey };
 
-    private static EnemySkillsMasterRecord EnemySkill(string enemyKey, string skillKey, byte weight)
-        => new() { EnemyKey = enemyKey, SkillKey = skillKey, Weight = weight };
+    private static EnemySkillsMasterRecord EnemySkill(
+        string enemyKey, byte index, string skillKey, byte weight)
+        => new()
+        {
+            EnemyKey = enemyKey, EnemySkillIndex = index, SkillKey = skillKey, Weight = weight,
+        };
 
     private static EnemyLootsMasterRecord Loot(
         string enemyKey, string itemKey, ushort quantity, decimal dropPercent)

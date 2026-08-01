@@ -25,8 +25,8 @@ namespace Chido.Tests.Battle;
 /// （参照先の欠落・起動時検証の不通過・組み立て不能なスキル）を捕まえる。
 /// </para>
 /// </summary>
-[Collection(BattleDatabaseCollection.Name)]
-public sealed class MasterDataTests(BattleDatabaseFixture fixture)
+[Collection(MasterDatabaseCollection.Name)]
+public sealed class MasterDataTests(MasterDatabaseFixture fixture)
 {
     [DatabaseFact]
     public async Task 投入したマスタで起動時検証が通る()
@@ -295,7 +295,7 @@ public sealed class MasterDataTests(BattleDatabaseFixture fixture)
         return catalogs;
     }
 
-    private sealed class FixtureDbContextFactory(BattleDatabaseFixture fixture)
+    private sealed class FixtureDbContextFactory(MasterDatabaseFixture fixture)
         : IDbContextFactory<ChidoDbContext>
     {
         public ChidoDbContext CreateDbContext()

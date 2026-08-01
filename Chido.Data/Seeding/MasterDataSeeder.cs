@@ -72,7 +72,7 @@ public static class MasterDataSeeder
         // 敵。スキル・効果・装備・アイテムがすべて揃った後
         added += await AddMissingAsync(db, MasterData.Enemies, x => x.EnemyKey, cancellationToken);
         added += await AddMissingAsync(
-            db, MasterData.EnemySkills, x => new { x.EnemyKey, x.SkillKey }, cancellationToken);
+            db, MasterData.EnemySkills, x => new { x.EnemyKey, x.EnemySkillIndex }, cancellationToken);
         added += await AddMissingAsync(
             db, MasterData.EnemyEffects, x => new { x.EnemyKey, x.EnemyEffectIndex }, cancellationToken);
         added += await AddMissingAsync(
