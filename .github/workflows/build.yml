@@ -20,7 +20,7 @@ jobs:
 
     services:
       # 実DBを要するテスト（Chido.Data.Tests の DatabaseFact）用のMySQL。
-      # 本番想定と同じ 9.7 LTS を使う（ChidoDbContextFactory の MySqlServerVersion と揃える）。
+      # 本番想定と同じ 9.7 LTS を使う（ChidoDbContextFactory の ServerVersion と揃える）。
       mysql:
         image: mysql:9.7
         env:

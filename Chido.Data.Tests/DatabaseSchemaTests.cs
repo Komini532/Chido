@@ -217,9 +217,10 @@ public class DatabaseSchemaTests
     /// EXPLAIN の key 列と Extra 列を読む。
     ///
     /// <para>
-    /// <b>出力形式を明示する。</b>既定の形式はサーバー変数（<c>explain_format</c>）に従うため、
-    /// 何も指定しないと列名が環境によって変わる。表形式の列名（<c>key</c> / <c>Extra</c>）を
-    /// 前提にしている以上、ここで固定しなければサーバーの設定次第で読めなくなる。
+    /// <c>FORMAT=TRADITIONAL</c> は必須。MySQL 9.x で <c>explain_format</c> の既定値が
+    /// <c>TRADITIONAL</c> から <c>TREE</c> に変わり、修飾なしの <c>EXPLAIN</c> は
+    /// key / Extra を持たない1列のツリー表現を返すようになった。明示しておけば
+    /// サーバー側の既定値に関係なく同じ形が返る（この構文は MySQL 8.0.32 以降）。
     /// </para>
     /// </summary>
     private static async Task<(string Key, string Extra)> ExplainAsync(ChidoDbContext db, string sql)

@@ -59,16 +59,20 @@ dotnet ef migrations script --project Chido.Data --startup-project Chido.Data -o
   MySqlConnector 側は対応済みのため接続文字列に変更は要らないが、8.0 から引き継いだ
   ユーザーが `mysql_native_password` の場合は接続できない。その場合は
   `ALTER USER 'chido'@'%' IDENTIFIED WITH caching_sha2_password BY '<password>';` で切り替える。
+- **`EXPLAIN` は `FORMAT=TRADITIONAL` を明示する。** MySQL 9.x で `explain_format` の既定値が
+  `TRADITIONAL` から `TREE` に変わったため、修飾なしの `EXPLAIN` は `key` / `Extra` を持たない
+  1列のツリー表現を返す。実行計画を目視・機械判定する箇所では常に明示すること
+  （`DatabaseSchemaTests.ExplainAsync` はそうしている）。
 
 ## 実DBに対する適用の確認
 
-MySQL 9.7（`STRICT_TRANS_TABLES`）に対して適用を確認済み。全49テーブルの作成、
+MySQL 9.7.2（`STRICT_TRANS_TABLES`）に対して適用を確認済み。全49テーブルの作成、
 `exp_len` / `amount_len` のストアド生成列、およびランキング用インデックスの逆走査
 （`Backward index scan; Using index`。`filesort` なし）まで含めて動作する。
-確認に用いる系列は LTS の移行に追随させている（8.0.46 → 8.4.11 → 9.7）。
-`ChidoDbContextFactory` の `MySqlServerVersion` をこの区間で上げても、
-EF Core が生成する DDL は1バイトも変わらない（Pomelo が機能の可否を切り替える閾値が
-その区間に存在しないため）。マイグレーションの再生成は不要。
+
+`ChidoDbContextFactory` の `ServerVersion` を 8.4.0 から 9.7.0 に上げても、
+EF Core が生成する DDL は1バイトも変わらない（Pomelo が機能の可否を切り替える閾値は
+8.0.31 が最大で、それより上に存在しないため）。マイグレーションの再生成は不要。
 
 ```bash
 docker run -d --name chido-mysql -e MYSQL_ROOT_PASSWORD=chido -e MYSQL_DATABASE=chido \
@@ -78,10 +82,11 @@ export CHIDO_MYSQL_CONNECTION="Server=127.0.0.1;Port=13306;Database=chido;User=r
 dotnet ef database update --project Chido.Data --startup-project Chido.Data
 ```
 
-逆走査が効いているかは次で確認する。
+逆走査が効いているかは次で確認する（`FORMAT=TRADITIONAL` の明示が要る理由は「注意点」を参照）。
 
 ```sql
-EXPLAIN SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC LIMIT 10;
+EXPLAIN FORMAT=TRADITIONAL
+SELECT user_id FROM chido_battle_status ORDER BY exp_len DESC, exp DESC LIMIT 10;
 -- Extra: Backward index scan; Using index （"Using filesort" が出ないこと）
 ```
 
