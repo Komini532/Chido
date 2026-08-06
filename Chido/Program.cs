@@ -9,6 +9,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+// 初期化モード（dotnet run -- setup）。Discord へ接続せず、マイグレーションの適用と
+// マスタ投入だけを行って終了する。空のDBでは起動時検証が必ず失敗し、かつテーブル作成の手段が
+// Discord の管理者コマンドしか無いため、これが無いと新規デプロイが立ち上がらない
+if (Setup.IsRequested(args))
+{
+    return await Setup.RunAsync();
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // DbContext はコマンドごとに独立したスコープで使う。Discord のイベントは並行して届き、
@@ -50,6 +58,7 @@ builder.Services.AddSingleton<ISlashCommand, StatusCommand>();
 builder.Services.AddSingleton<ISlashCommand, EquipCommand>();
 builder.Services.AddSingleton<ISlashCommand, InventoryCommand>();
 builder.Services.AddSingleton<ISlashCommand, AdminDbMigrateCommand>();
+builder.Services.AddSingleton<ISlashCommand, AdminSeedMasterCommand>();
 builder.Services.AddSingleton<ISlashCommand, AdminDbStatusCommand>();
 
 builder.Services.AddHostedService<DiscordBotService>();
@@ -63,6 +72,21 @@ var host = builder.Build();
 // 起動時検証（戦闘システム 10.5）。草原フォールバックは DrawGroup と NextField の
 // 両方が依存しているため、欠けていると抽選のたびに例外へ落ちる。
 // 実行時の例外だけで守ると発覚がプレイヤーの行動時点まで遅れるため、ここで止める
-await host.Services.GetRequiredService<GameCatalogs>().ReloadAsync();
+try
+{
+    await host.Services.GetRequiredService<GameCatalogs>().ReloadAsync();
+}
+catch (Exception ex)
+{
+    // ここで失敗する原因はほぼ「まだ初期化していない」に尽きる。
+    // 例外をそのまま投げるとテーブル不在のSQLエラーだけが出て、次に何をすべきかが伝わらない
+    Console.Error.WriteLine(
+        $"マスタの読み込みに失敗しました: {ex.Message}{Environment.NewLine}" +
+        $"未初期化の可能性があります。`dotnet run -- {Setup.ArgumentName}` を実行してください。");
+
+    return 1;
+}
 
 await host.RunAsync();
+
+return 0;
